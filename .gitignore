@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Runtime caches & generated assets
+.cache/
+!.cache/.gitkeep
+media/**/*.wav
+media/**/*.mp3
+media/**/*.m4a
+media/**/*.flac
+media/**/*.aac
+media/**/*.ogg
+!media/.gitkeep
+!media/jay_chou/.gitkeep
+models/*.onnx
+!models/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
