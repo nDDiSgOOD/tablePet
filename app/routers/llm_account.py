@@ -229,34 +229,53 @@ _MODELS_CACHE: dict[str, dict[str, Any]] = {}  # cache key -> {ts, models}
 _MODELS_TTL = 300.0  # 5 分钟，避免 input 抖动反复打 provider
 
 
-def _models_url(base_url: str) -> str:
-    """把 base_url 规整成 ``{root}/v1/models``。
+def _models_url_candidates(base_url: str) -> list[str]:
+    """按"先 DeepSeek 风格 / 再 OpenAI 风格"返回候选 URL 列表。
 
-    DeepSeek / OpenAI / Moonshot / 智谱 GLM / 通义 / 百川 等 OpenAI-compatible
-    厂商都遵循 ``GET {base}/v1/models`` 这条 spec。Anthropic / Gemini 不在
-    此列——前端策略是"探测失败就让用户手填"，所以这里不做 provider 分支。
+    各 provider 的官方 spec 不一致：
+    - DeepSeek 文档：``GET https://api.deepseek.com/models``（**无 /v1**）
+    - OpenAI 文档：``GET https://api.openai.com/v1/models``（**必须 /v1**）
+    - Moonshot / 智谱 / 通义等多遵循 OpenAI 风格
+
+    所以单一拼接路径会漏。我们做双探测，第一个返 200 且 schema 合法就用它。
+    用户写 base_url 时也可能已经写到 /v1 后缀，这里都做归一化。
     """
     base = (base_url or "").rstrip("/")
     # 用户可能写成 .../chat/completions 这种"已经写到具体方法"的形式，
     # 把它退回到根 base
     if base.endswith("/chat/completions"):
         base = base[: -len("/chat/completions")]
-    if base.endswith("/v1"):
-        return f"{base}/models"
-    return f"{base}/v1/models"
+    # 再剥掉一个 /v1（如果有），统一成 root，方便我们组合两种候选
+    root = base[:-3].rstrip("/") if base.endswith("/v1") else base
+    candidates: list[str] = []
+    # 先 DeepSeek 风格（无 /v1）—— 这是 DeepSeek 文档的官方推荐路径
+    candidates.append(f"{root}/models")
+    # 再 OpenAI 风格（带 /v1）—— OpenAI / Moonshot / 智谱 等的标准
+    candidates.append(f"{root}/v1/models")
+    # 去重保留顺序
+    seen: set[str] = set()
+    out: list[str] = []
+    for u in candidates:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
 
 
 @router.post("/api/llm/probe-models")
 async def api_probe_models(payload: dict[str, Any]) -> dict[str, Any]:
-    """用 ``base_url + api_key`` 调一次 ``GET /v1/models`` 拿模型清单。
+    """用 ``base_url + api_key`` 双探测拉模型清单。
 
     设计：
     - 不依赖任何已存账号，纯探测。前端在编辑表单里 ``api_key`` debounce
-      之后调，结果填到 ``<datalist>`` 给 ``chat_model / summary_model`` 选。
-    - 5 分钟内存缓存，key = (base_url, api_key 后 8 位)，避免反复打 provider。
-    - provider 不返回标准 schema 时（Anthropic / Gemini 之类）直接返回 ``ok=false``，
-      前端继续走"手填"，按照取舍约定不做内置兜底清单。
-    - 故意不要求 provider 字段——base_url + api_key 是真理来源。
+      之后调，结果填到自定义 combobox。
+    - 5min 缓存（key = base_url + api_key 末 8 位）；缓存的是接口返回的
+      models 数组本身，不是按输入缓存。
+    - 双探测：先试 DeepSeek 风格 ``{root}/models``，schema 合法就用；
+      否则 fallback OpenAI 风格 ``{root}/v1/models``。两个都拿到结果时，
+      取**模型数量更多**的那个（DeepSeek 上 /v1/models 是 alias 但内容更少
+      的情况就是这条规则的目标场景）。
+    - 401 / 403 直接返 ok=false，不再 fallback —— auth 错跟路径无关。
     """
     base_url = str(payload.get("base_url") or "").strip()
     api_key = str(payload.get("api_key") or "").strip()
@@ -268,49 +287,71 @@ async def api_probe_models(payload: dict[str, Any]) -> dict[str, Any]:
     if cached and time.time() - cached["ts"] < _MODELS_TTL:
         return {"ok": True, "models": cached["models"], "cached": True}
 
-    url = _models_url(base_url)
-    try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(
-                url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Accept": "application/json",
-                },
-            )
-    except Exception as exc:
-        return {"ok": False, "error": f"网络异常：{str(exc)[:120]}"}
+    candidates = _models_url_candidates(base_url)
+    last_error = ""
+    auth_failed = False
+    successes: list[tuple[str, list[str]]] = []  # (url, models)
 
-    if r.status_code == 401 or r.status_code == 403:
-        return {"ok": False, "error": "API Key 无效或没有访问 /v1/models 的权限"}
-    if r.status_code == 404:
-        return {"ok": False, "error": "该 provider 不支持 /v1/models（请手填模型名）"}
-    if r.status_code != 200:
-        return {"ok": False, "error": f"provider 返回 HTTP {r.status_code}"}
+    async with httpx.AsyncClient(timeout=8) as client:
+        for url in candidates:
+            try:
+                r = await client.get(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Accept": "application/json",
+                    },
+                )
+            except Exception as exc:
+                last_error = f"网络异常：{str(exc)[:120]}"
+                continue
 
-    try:
-        data = r.json()
-    except Exception:
-        return {"ok": False, "error": "返回不是有效 JSON"}
+            if r.status_code in (401, 403):
+                # auth 错跟路径无关，立刻退出 —— 再试别的路径也是 401，纯浪费
+                auth_failed = True
+                last_error = "API Key 无效或没有访问 /models 的权限"
+                break
+            if r.status_code != 200:
+                last_error = f"{url} 返回 HTTP {r.status_code}"
+                continue
+            try:
+                data = r.json()
+            except Exception:
+                last_error = f"{url} 返回非 JSON"
+                continue
+            items = data.get("data") if isinstance(data, dict) else None
+            if not isinstance(items, list):
+                last_error = f"{url} schema 不符合 OpenAI spec"
+                continue
+            models: list[str] = []
+            for it in items:
+                if isinstance(it, dict):
+                    mid = it.get("id")
+                    if isinstance(mid, str) and mid:
+                        models.append(mid)
+            models = sorted(set(models))
+            if models:
+                successes.append((url, models))
 
-    # 标准 OpenAI-compatible schema: {"object":"list","data":[{"id":"...",...}, ...]}
-    items = data.get("data") if isinstance(data, dict) else None
-    if not isinstance(items, list):
-        return {"ok": False, "error": "返回 schema 不符合 OpenAI spec"}
+    if auth_failed:
+        return {"ok": False, "error": last_error}
 
-    models: list[str] = []
-    for it in items:
-        if isinstance(it, dict):
-            mid = it.get("id")
-            if isinstance(mid, str) and mid:
-                models.append(mid)
-    # 字典序排好，让 datalist 体验稳定
-    models = sorted(set(models))
-    if not models:
-        return {"ok": False, "error": "provider 返回空模型清单"}
+    if not successes:
+        return {"ok": False, "error": last_error or "未能从任何标准路径拿到模型清单"}
 
-    _MODELS_CACHE[cache_key] = {"ts": time.time(), "models": models}
-    return {"ok": True, "models": models, "cached": False}
+    # 取模型数量最多的那条 —— 同 provider 不同路径返回不一致时
+    # （DeepSeek 上 /v1/models 是 alias 但只返回部分模型即此场景），
+    # 数量多的更可能是真清单
+    successes.sort(key=lambda x: len(x[1]), reverse=True)
+    chosen_url, chosen_models = successes[0]
+
+    _MODELS_CACHE[cache_key] = {"ts": time.time(), "models": chosen_models}
+    return {
+        "ok": True,
+        "models": chosen_models,
+        "cached": False,
+        "source_url": chosen_url,
+    }
 
 
 @router.post("/api/llm/accounts/{account_id}/refresh-balance")
