@@ -1778,13 +1778,11 @@
       border-color:var(--bad);
       color:oklch(0.99 0 0);
     }
-    .session-summary {
-      padding:6px var(--s-3);
-      font-size:var(--fs-sm); color:var(--muted);
-      font-style:italic;
-      background:color-mix(in oklch, var(--panel-2) 30%, transparent);
-      border-top:1px solid var(--line-soft);
-    }
+    /* 旧的 .session-summary 全局兜底（padding 6px / italic / muted）已删除：
+       它后定义会覆盖会话卡内的新样式（line ~989+），导致 padding 砍成 6px
+       后中文 descender 被切，summary 看起来"只剩字的上半身"。
+       viewer 自己有 #sessionViewerSummary .session-summary 单独控制不依赖
+       这个全局规则。 */
 
     /* ========== 人格切换 ========== */
     .persona-grid {
