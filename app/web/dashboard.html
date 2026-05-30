@@ -1740,14 +1740,39 @@
     }
     .viewer-body::-webkit-scrollbar { width:8px; }
     .viewer-body::-webkit-scrollbar-thumb { background:var(--line); border-radius:4px; }
+    /* 底部操作栏：grid 1fr/auto，左侧吃下'多选/接着聊'按钮组，右侧固定
+       '删除整个会话'按钮，永远不会因为窗口窄而把右侧按钮顶出去。*/
     .viewer-actions {
-      display:flex; gap:var(--s-2); align-items:center; flex-wrap:wrap;
+      display:grid;
+      grid-template-columns:1fr auto;
+      align-items:center; gap:var(--s-3);
       padding:14px 22px;
       border-top:1px solid var(--line-soft);
       background:color-mix(in oklch, var(--panel-2) 40%, transparent);
       flex-shrink:0;
     }
+    .viewer-actions .va-left,
+    .viewer-actions .va-right {
+      display:flex; gap:var(--s-2); align-items:center; flex-wrap:wrap;
+    }
+    .viewer-actions .va-right { justify-content:flex-end; }
     .viewer-actions .grow { flex:1; }
+    /* 兼容老结构（actBar 写 active 提示文字时不分左右两栏） */
+    .viewer-actions > .small {
+      grid-column:1 / -1; color:var(--muted);
+    }
+    /* viewer 内的按钮配色：danger 同样需要 bad-soft 底色，否则在半透明
+       panel 上仅靠红边几乎看不见 */
+    .viewer-actions .btn.danger {
+      background:var(--bad-soft);
+      border-color:oklch(0.70 0.20 25 / 0.35);
+      color:var(--bad);
+    }
+    .viewer-actions .btn.danger:hover {
+      background:var(--bad);
+      border-color:var(--bad);
+      color:oklch(0.99 0 0);
+    }
     .session-summary {
       padding:6px var(--s-3);
       font-size:var(--fs-sm); color:var(--muted);
@@ -3722,7 +3747,16 @@ async function _loadSessionTurns(sid, force=false) {
 function _renderSessionCard(s) {
   const active = !s.closed_at;
   const title = s.title || (active ? '当前会话' : '未命名会话');
-  const turnCount = s.live_turn_count != null ? s.live_turn_count : (s.turn_count || 0);
+  // 计数策略修正：
+  //   - 活跃会话：用 live_turn_count（实时 SQL COUNT，准确）
+  //   - 归档会话：优先用 s.turn_count（归档时回填到 conversation_session
+  //     的最终值），因为短期记忆压缩后老 turn 的 session_id 可能为 null，
+  //     live_turn_count（COUNT(*) WHERE session_id=...）会算成 0。
+  // 之前的写法 `live_turn_count != null ? live_turn_count : turn_count`
+  // 永远走第一支（COUNT 不会返 null），导致归档会话全显示 0。
+  const turnCount = active
+    ? (s.live_turn_count != null ? s.live_turn_count : (s.turn_count || 0))
+    : (s.turn_count || s.live_turn_count || 0);
   const meta = `${turnCount} 轮 · ${_formatTimeRange(s)}`;
   const pick = active
     ? '<span class="pick"></span>'
@@ -3872,14 +3906,39 @@ async function openSessionViewer(sid) {
   // 操作栏
   const actBar = $('sessionViewerActions');
   if (isActive) {
-    actBar.innerHTML = '<span class="small" style="color:var(--muted);">这是当前进行中的会话，结束 / 删除 请去“对话”页操作</span>';
+    actBar.innerHTML = '<span class="small">这是当前进行中的会话，结束 / 删除请去“对话”页操作</span>';
   } else {
+    // 左右两栏：左侧"接着聊 + 多选 + 删除选中"，右侧"删除整个会话"。
+    // 全部按钮加 SVG icon 替代 emoji（对齐 DESIGN.md anti-pattern #6），
+    // 让 viewer 在 96vw 窗口下也能看到完整的按钮组。
     actBar.innerHTML = `
-      <button class="btn primary" id="viewerResumeBtn">▶ 接着聊</button>
-      <button class="btn" id="viewerMultiBtn">☑ 多选消息</button>
-      <button class="btn danger" id="viewerBatchDelBtn" style="display:none;">删除选中</button>
-      <span class="grow"></span>
-      <button class="btn danger" id="viewerDelSessionBtn">🗑 删除整个会话</button>
+      <div class="va-left">
+        <button class="btn primary btn-icon-text" id="viewerResumeBtn" title="把这条会话续接为当前对话">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3 L13 8 L4 13 Z"/></svg>
+          接着聊
+        </button>
+        <button class="btn btn-icon-text" id="viewerMultiBtn" title="进入多选删除消息模式">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="2.5" width="11" height="11" rx="2"/>
+            <path d="M5.5 8 L7.3 9.8 L10.8 6"/>
+          </svg>
+          多选消息
+        </button>
+        <button class="btn danger btn-icon-text" id="viewerBatchDelBtn" style="display:none;" title="删除已勾选的消息">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 4.5 H13 M5.5 4.5 V3.2 C5.5 2.5 6 2 6.7 2 H9.3 C10 2 10.5 2.5 10.5 3.2 V4.5 M4.5 4.5 L5 13 C5 13.6 5.5 14 6 14 H10 C10.5 14 11 13.6 11 13 L11.5 4.5"/>
+          </svg>
+          删除选中
+        </button>
+      </div>
+      <div class="va-right">
+        <button class="btn danger btn-icon-text" id="viewerDelSessionBtn" title="删除整个会话以及全部消息">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 4.5 H13 M5.5 4.5 V3.2 C5.5 2.5 6 2 6.7 2 H9.3 C10 2 10.5 2.5 10.5 3.2 V4.5 M4.5 4.5 L5 13 C5 13.6 5.5 14 6 14 H10 C10.5 14 11 13.6 11 13 L11.5 4.5"/>
+          </svg>
+          删除整个会话
+        </button>
+      </div>
     `;
     $('viewerResumeBtn').addEventListener('click', () => _viewerResume());
     $('viewerMultiBtn').addEventListener('click', () => _viewerToggleMulti());
@@ -3921,7 +3980,10 @@ function _renderViewerBody() {
 
 function _viewerToggleMulti() {
   _viewerMultiOn = !_viewerMultiOn;
-  $('viewerMultiBtn').textContent = _viewerMultiOn ? '✕ 退出多选' : '☑ 多选消息';
+  // textContent 会清掉 SVG，改用 innerHTML 整体重写
+  $('viewerMultiBtn').innerHTML = _viewerMultiOn
+    ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>退出多选'
+    : '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8 L7.3 9.8 L10.8 6"/></svg>多选消息';
   $('viewerBatchDelBtn').style.display = _viewerMultiOn ? '' : 'none';
   _renderViewerBody();
 }
@@ -3946,7 +4008,11 @@ async function _viewerBatchDelete() {
   _sessionTurnsCache.delete(_viewerSid);
   _viewerTurns = await _loadSessionTurns(_viewerSid, true);
   _viewerMultiOn = false;
-  $('viewerMultiBtn').textContent = '☑ 多选消息';
+  // 同样用 innerHTML 重写，保留 SVG icon
+  const mb = $('viewerMultiBtn');
+  if (mb) {
+    mb.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8 L7.3 9.8 L10.8 6"/></svg>多选消息';
+  }
   $('viewerBatchDelBtn').style.display = 'none';
   _renderViewerBody();
   refreshMemory();
@@ -5584,6 +5650,11 @@ async function bootstrap() {
   refreshTopbarPet();
   refreshChatHero();
   loadGreeting();
+  // 用户首次进来或刷新页面时如果已经停在 #memory，hashchange 不会触发，
+  // 这里兜底拉一次会话流水，免得用户看到"点击右上角刷新加载"空状态。
+  if ((location.hash.slice(1) || 'profile') === 'memory') {
+    if (typeof refreshSessions === 'function') refreshSessions({ append: false });
+  }
 
   // 切换到账户页时强制刷一次（可能用户改完后切回来）
   window.addEventListener('hashchange', () => {
