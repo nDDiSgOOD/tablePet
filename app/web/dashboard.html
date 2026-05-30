@@ -140,10 +140,41 @@
       width:80px; height:80px; border-radius:50%;
       background:linear-gradient(135deg, var(--accent), var(--pink));
       display:flex; align-items:center; justify-content:center; font-size:36px; font-weight:700;
+      flex-shrink:0; overflow:hidden; position:relative;
     }
+    .avatar.lg { width:96px; height:96px; font-size:42px; }
+    .avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+    .avatar-edit {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.55); color:#fff; opacity:0; cursor:pointer; font-size:13px;
+      transition:opacity .15s; border-radius:50%;
+    }
+    .avatar:hover .avatar-edit { opacity:1; }
     .profile-row { display:grid; grid-template-columns:120px 1fr; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); }
     .profile-row:last-child { border-bottom:none; }
     .profile-row label { color:var(--muted); }
+
+    /* ========== 通用表单 ========== */
+    .form-grid { display:grid; gap:14px; }
+    .form-grid .field { display:flex; flex-direction:column; gap:6px; }
+    .form-grid .field.full { grid-column:1 / -1; }
+    .form-grid .field-label { font-size:12px; color:var(--muted); letter-spacing:.4px; }
+    .form-grid input,
+    .form-grid select,
+    .form-grid textarea {
+      width:100%; box-sizing:border-box;
+      background:#0d1217; border:1px solid var(--line);
+      border-radius:8px; padding:9px 12px; font:inherit; color:inherit; outline:none;
+      transition:border-color .15s;
+    }
+    .form-grid input:focus,
+    .form-grid select:focus,
+    .form-grid textarea:focus { border-color:var(--accent); }
+    .form-grid textarea { resize:vertical; min-height:72px; line-height:1.5; }
+    .form-grid .form-actions { display:flex; gap:8px; justify-content:flex-end; padding-top:6px; }
+    @media (min-width:720px) {
+      .form-grid.cols-2 { grid-template-columns:1fr 1fr; }
+    }
 
     /* ========== 宠物状态 ========== */
     .pet-stage {
@@ -163,7 +194,10 @@
     .pet-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
 
     /* ========== 记忆管理 ========== */
-    .memory-list { display:flex; flex-direction:column; gap:8px; max-height:480px; overflow-y:auto; }
+    .memory-list { display:flex; flex-direction:column; gap:8px; max-height:480px; overflow-y:auto; padding-right:4px; }
+    .memory-list.compact { max-height:200px; }
+    /* 会话流水容器：限高更高一些，给多个 card 滚动空间 */
+    #sessionList { max-height:600px; }
     .memory-item {
       display:flex; gap:10px; align-items:center; padding:10px 12px;
       background:var(--panel-2); border-radius:8px; border:1px solid var(--line);
@@ -172,11 +206,90 @@
     .memory-add { display:flex; gap:8px; margin-top:12px; }
     .memory-add input { flex:1; }
     .recent-chat {
-      padding:10px 12px; background:var(--panel-2); border-radius:8px;
-      border:1px solid var(--line); font-size:13px; margin-bottom:8px;
+      padding:8px 10px; background:var(--panel-2); border-radius:8px;
+      border:1px solid var(--line); font-size:12.5px; margin-bottom:6px;
+      line-height:1.5;
     }
     .recent-chat .u { color:var(--accent); }
     .recent-chat .a { color:var(--pink); }
+
+    /* ========== 会话列表 ========== */
+    /* 已经改成"卡片只显示概要 + 操作按钮，详情走悬浮窗"，所以
+     * session-body / session-turns 这些行内展开样式保留也不会被使用。
+     */
+    .session-card {
+      border:1px solid var(--line); border-radius:10px; background:var(--panel-2);
+      overflow:hidden;
+    }
+    .session-card.active { border-color:var(--accent); box-shadow:0 0 0 1px rgba(112,184,255,.3); }
+    .session-head {
+      display:flex; gap:10px; align-items:center; padding:10px 14px;
+      cursor:pointer; user-select:none;
+    }
+    .session-head:hover { background:rgba(112,184,255,.06); }
+    .session-head .arrow { width:14px; transition:transform .15s; color:var(--muted); }
+    .session-head.open .arrow { transform:rotate(90deg); }
+    .session-head .title { flex:1; font-weight:600; min-width:0; }
+    .session-head .meta  { font-size:11px; color:var(--muted); white-space:nowrap; }
+    .session-head .badges { display:flex; gap:4px; }
+    .session-actions {
+      display:flex; justify-content:flex-end; align-items:center; gap:6px;
+      padding:8px 14px; border-top:1px solid var(--line); flex-wrap:wrap;
+      background:rgba(15,18,22,.25);
+    }
+    .session-actions .small { margin-right:auto; }
+
+    /* ========== 完整对话流水 ========== */
+    .turn-row {
+      padding:10px 12px; border-radius:8px; border:1px solid var(--line);
+      background:var(--panel-2); display:flex; flex-direction:column; gap:6px;
+      font-size:13px;
+    }
+    .turn-row .turn-meta { display:flex; gap:8px; align-items:center; color:var(--muted); font-size:11px; }
+    .turn-row .turn-meta .grow { flex:1; }
+    .turn-row .turn-line { line-height:1.55; white-space:pre-wrap; word-break:break-word; }
+    .turn-row .turn-u .role { color:var(--accent); font-weight:600; margin-right:6px; }
+    .turn-row .turn-a .role { color:var(--pink);   font-weight:600; margin-right:6px; }
+    .turn-row.is-system { background:rgba(255,209,102,.08); border-color:rgba(255,209,102,.4); }
+    .turn-row.is-system .turn-line { color:var(--warn); font-style:italic; }
+    .turn-row .btn-del { padding:2px 8px; font-size:12px; }
+
+    /* ========== 日历 ========== */
+    .cal-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
+    .cal-grid .cell-h, .cal-grid .cell {
+      padding:8px 4px; text-align:center; border-radius:6px; font-size:13px;
+      border:1px solid transparent;
+    }
+    .cal-grid .cell-h { color:var(--muted); font-weight:600; }
+    .cal-grid .cell { background:rgba(28,35,43,.5); cursor:pointer; min-height:48px; position:relative; }
+    .cal-grid .cell.empty-cell { background:transparent; cursor:default; }
+    .cal-grid .cell.has-summary { background:linear-gradient(135deg, rgba(112,184,255,.25), rgba(181,140,255,.25)); border-color:rgba(112,184,255,.5); font-weight:600; }
+    .cal-grid .cell.is-today { border-color:var(--accent); }
+    .cal-grid .cell.selected { background:linear-gradient(135deg, var(--accent), var(--purple)); color:#fff; }
+    .cal-grid .cell:hover:not(.empty-cell) { transform:scale(1.04); }
+    .cal-grid .cell .tok-tag {
+      position:absolute; bottom:2px; left:50%; transform:translateX(-50%);
+      font-size:10px; line-height:1; padding:1px 4px; border-radius:4px;
+      background:rgba(112,184,255,.18); color:var(--accent); font-weight:600;
+      pointer-events:none;
+    }
+    .cal-grid .cell.selected .tok-tag { background:rgba(255,255,255,.2); color:#fff; }
+    /* 日历 cell 心情 emoji 角标 */
+    .cal-grid .cell .mood-tag {
+      position:absolute; bottom:1px; right:3px;
+      font-size:13px; line-height:1; pointer-events:none;
+      filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));
+    }
+    .cal-grid .cell.selected .mood-tag { filter:none; }
+    /* 日记面板上的心情徽章 */
+    .mood-badge {
+      display:inline-flex; gap:6px; align-items:center;
+      padding:4px 10px; border-radius:99px;
+      background:linear-gradient(135deg, rgba(112,184,255,.15), rgba(181,140,255,.15));
+      border:1px solid rgba(112,184,255,.3);
+      font-size:13px; font-weight:600;
+    }
+    .mood-badge .emoji { font-size:18px; line-height:1; }
 
     /* ========== TablePet 状态（沿用旧版） ========== */
     .value { font-size:24px; font-weight:750; overflow-wrap:anywhere; }
@@ -287,6 +400,319 @@
       color:var(--text); font-size:16px;
     }
     .close-x:hover { background:var(--bad); color:#fff; }
+
+    /* ========== 全局底部状态栏 ========== */
+    #footerBar {
+      position:fixed; left:240px; right:0; bottom:0; z-index:900;
+      display:flex; gap:14px; align-items:center; padding:6px 18px;
+      background:rgba(15,18,22,.92); border-top:1px solid var(--line);
+      font-size:12px; color:var(--muted); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    }
+    #footerBar .item { display:flex; gap:6px; align-items:center; }
+    #footerBar .item .num { color:var(--text); font-weight:600; font-family:"SF Mono", Menlo, monospace; }
+    #footerBar .grow { flex:1; }
+    #footerBar a { color:var(--accent); cursor:pointer; }
+    #footerBar a.warn { color:var(--warn); font-weight:600; }
+    main.content { padding-bottom:48px; }
+    @media (max-width:900px) { #footerBar { left:0; } }
+
+    /* ========== Confirm 弹窗 ========== */
+    #confirmMask {
+      position:fixed; inset:0; z-index:2500;
+      background:rgba(0,0,0,.55); display:none;
+      align-items:center; justify-content:center;
+      animation:cfFade .15s ease;
+    }
+    #confirmMask.show { display:flex; }
+    @keyframes cfFade { from{opacity:0} to{opacity:1} }
+    #confirmBox {
+      width:min(420px, 90vw); background:var(--panel);
+      border:1px solid var(--line); border-radius:14px;
+      box-shadow:0 24px 64px rgba(0,0,0,.5);
+      padding:22px 22px 18px; animation:cfPop .18s ease;
+    }
+    @keyframes cfPop { from{transform:scale(.92); opacity:0} to{transform:scale(1); opacity:1} }
+    #confirmBox h3 { margin:0 0 10px; font-size:17px; font-weight:700; }
+    #confirmBox .body { color:var(--muted); line-height:1.6; font-size:14px; margin-bottom:18px; white-space:pre-wrap; }
+    #confirmBox .actions { display:flex; justify-content:flex-end; gap:8px; }
+
+    /* ========== 会话查看悬浮窗 ========== */
+    #sessionViewerMask {
+      position:fixed; inset:0; z-index:2400;
+      background:rgba(0,0,0,.6); display:none;
+      align-items:center; justify-content:center;
+      animation:cfFade .15s ease;
+      padding:20px;
+    }
+    #sessionViewerMask.show { display:flex; }
+    #sessionViewerBox {
+      width:min(900px, 96vw); height:min(80vh, 760px);
+      background:var(--panel); border:1px solid var(--line); border-radius:14px;
+      box-shadow:0 24px 64px rgba(0,0,0,.55);
+      display:flex; flex-direction:column;
+      animation:cfPop .18s ease;
+      overflow:hidden;
+    }
+    .viewer-head {
+      display:flex; justify-content:space-between; align-items:flex-start;
+      padding:18px 22px 14px; border-bottom:1px solid var(--line);
+      flex-shrink:0;
+    }
+    .viewer-head h3 { margin:0 0 4px; font-size:17px; font-weight:700; }
+    .viewer-head .close-x {
+      position:static; width:32px; height:32px; cursor:pointer;
+    }
+    #sessionViewerSummary { padding:10px 22px 0; flex-shrink:0; }
+    #sessionViewerSummary .session-summary {
+      background:rgba(112,184,255,.08); border:1px solid rgba(112,184,255,.18);
+      padding:8px 12px; border-radius:8px; font-size:13px;
+      color:var(--muted); font-style:italic;
+    }
+    .viewer-body {
+      flex:1; min-height:0; overflow-y:auto;
+      padding:14px 22px; display:flex; flex-direction:column; gap:8px;
+      scrollbar-width:thin; scrollbar-color:var(--line) transparent;
+    }
+    .viewer-body::-webkit-scrollbar { width:8px; }
+    .viewer-body::-webkit-scrollbar-thumb { background:var(--line); border-radius:4px; }
+    .viewer-actions {
+      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+      padding:14px 22px; border-top:1px solid var(--line);
+      background:rgba(15,18,22,.4);
+      flex-shrink:0;
+    }
+    .viewer-actions .grow { flex:1; }
+    /* session card 上的小总结块 */
+    .session-summary {
+      padding:6px 12px; font-size:12px; color:var(--muted); font-style:italic;
+      background:rgba(15,18,22,.3); border-top:1px solid var(--line);
+    }
+
+    /* ========== 人格切换 ========== */
+    .persona-grid {
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
+      gap:10px;
+    }
+    .persona-card {
+      padding:12px; border:1px solid var(--line); border-radius:10px;
+      background:var(--panel-2); cursor:pointer; min-width:0;
+      display:flex; flex-direction:column; gap:6px;
+      transition:transform .12s, border-color .15s, box-shadow .15s;
+    }
+    .persona-card:hover { transform:translateY(-1px); border-color:var(--accent); }
+    .persona-card.active {
+      border-color:var(--accent); box-shadow:0 0 0 1px rgba(112,184,255,.35);
+      background:linear-gradient(135deg, rgba(112,184,255,.1), rgba(181,140,255,.06));
+    }
+    .persona-card .head { display:flex; gap:8px; align-items:center; }
+    .persona-card .head .emoji { font-size:22px; line-height:1; }
+    .persona-card .head .label { font-weight:700; font-size:14px; }
+    .persona-card .desc { font-size:12px; color:var(--muted); line-height:1.4; }
+    .persona-card.is-random {
+      background:linear-gradient(135deg, rgba(255,143,177,.1), rgba(181,140,255,.1));
+      border-color:rgba(255,143,177,.3);
+    }
+    .persona-card.is-random.active {
+      box-shadow:0 0 0 1px rgba(255,143,177,.4);
+    }
+    /* 随机模式开关 —— 滑动按钮 */
+    .switch {
+      position:relative; display:inline-block; width:46px; height:24px;
+      flex-shrink:0;
+    }
+    .switch input { opacity:0; width:0; height:0; }
+    .switch .slider {
+      position:absolute; cursor:pointer; inset:0;
+      background:#2b323b; border:1px solid var(--line); border-radius:24px;
+      transition:.2s;
+    }
+    .switch .slider:before {
+      content:""; position:absolute; height:18px; width:18px;
+      left:2px; top:2px; background:#cfd6df; border-radius:50%;
+      transition:.2s;
+    }
+    .switch input:checked + .slider {
+      background:linear-gradient(135deg, rgba(255,143,177,.6), rgba(181,140,255,.6));
+      border-color:rgba(255,143,177,.4);
+    }
+    .switch input:checked + .slider:before {
+      transform:translateX(22px); background:#fff;
+    }
+    .persona-random-banner {
+      padding:14px 16px; border-radius:10px;
+      background:linear-gradient(135deg, rgba(255,143,177,.12), rgba(181,140,255,.12));
+      border:1px solid rgba(255,143,177,.3);
+      font-size:13px; line-height:1.55; color:var(--text);
+    }
+    .persona-random-banner .title { font-weight:700; margin-bottom:4px; }
+    .persona-random-banner .small { color:var(--muted); }
+
+    /* ========== 账户情况 ========== */
+    /* hero 卡：当前生效 + 4 个 KPI */
+    .acct-hero {
+      display:grid; grid-template-columns:1.2fr 2fr; gap:16px;
+      padding:18px 20px; border:1px solid var(--line); border-radius:14px;
+      background:linear-gradient(135deg, rgba(112,184,255,.08), rgba(181,140,255,.08));
+    }
+    @media (max-width:780px) { .acct-hero { grid-template-columns:1fr; } }
+    .acct-hero-left { display:flex; flex-direction:column; justify-content:center; gap:4px; min-width:0; }
+    .acct-hero-label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+    .acct-hero-name  { font-size:22px; font-weight:700; line-height:1.3; word-break:break-all; }
+    .acct-hero-meta  { font-size:13px; color:var(--muted); }
+    .acct-hero-stats { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
+    @media (max-width:780px) { .acct-hero-stats { grid-template-columns:repeat(2, 1fr); } }
+    .acct-hero-stats .kpi {
+      background:rgba(15,18,22,.4); border:1px solid var(--line);
+      border-radius:10px; padding:10px 12px; min-width:0;
+    }
+    .acct-hero-stats .kpi-num   { font-size:20px; font-weight:700; color:var(--text); font-family:"SF Mono", Menlo, monospace; line-height:1.2; word-break:break-all; }
+    .acct-hero-stats .kpi-label { font-size:11px; color:var(--muted); margin-top:2px; }
+
+    /* panel 头部小工具条 */
+    .panel-head {
+      display:flex; justify-content:space-between; align-items:center;
+      padding-bottom:12px; margin-bottom:12px; border-bottom:1px solid var(--line);
+    }
+
+    /* 账号列表 —— 单列大卡 */
+    .acct-list { display:flex; flex-direction:column; gap:10px; }
+    .acct-card {
+      padding:14px 16px; border:1px solid var(--line); border-radius:12px;
+      background:var(--panel-2); display:grid; gap:10px;
+      grid-template-columns:auto 1fr auto;
+      align-items:center;
+      transition:border-color .15s, transform .12s, box-shadow .15s;
+    }
+    .acct-card:hover { transform:translateY(-1px); border-color:var(--accent); }
+    .acct-card.active {
+      border-color:var(--accent); box-shadow:0 0 0 1px rgba(112,184,255,.35);
+      background:linear-gradient(135deg, rgba(112,184,255,.1), rgba(181,140,255,.06));
+    }
+    .acct-card .badge-provider {
+      width:44px; height:44px; border-radius:10px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:20px; font-weight:700; background:rgba(112,184,255,.15); color:var(--accent);
+    }
+    .acct-card .info { min-width:0; display:flex; flex-direction:column; gap:3px; }
+    .acct-card .info .name { font-weight:700; font-size:15px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .acct-card .info .meta { font-size:12px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap; }
+    .acct-card .info .key  { color:var(--muted); font-family:"SF Mono", Menlo, monospace; font-size:12px; }
+    .acct-card .right     { display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+    .acct-card .balance   { font-size:18px; font-weight:700; color:var(--accent); font-family:"SF Mono", Menlo, monospace; }
+    .bal-tag {
+      display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px;
+      font-size:10px; font-weight:600; font-family:system-ui, sans-serif;
+      vertical-align:middle;
+    }
+    .bal-tag.live  { background:rgba(80,216,144,.15);  color:var(--ok); }
+    .bal-tag.local { background:rgba(152,166,179,.15); color:var(--muted); }
+    .acct-card .actions   { display:flex; gap:6px; flex-wrap:wrap; }
+    .acct-card .actions .btn { padding:5px 12px; font-size:12px; }
+    @media (max-width:680px) {
+      .acct-card { grid-template-columns:auto 1fr; }
+      .acct-card .right { grid-column:1 / -1; align-items:stretch; flex-direction:row; justify-content:space-between; }
+    }
+
+    /* Tabs */
+    .acct-tabs {
+      display:flex; gap:4px; align-items:center;
+      border-bottom:1px solid var(--line); margin:-2px -2px 16px;
+    }
+    .acct-tabs .tab {
+      padding:10px 16px; cursor:pointer; font-size:14px; color:var(--muted);
+      border-bottom:2px solid transparent; transition:color .15s, border-color .15s;
+    }
+    .acct-tabs .tab:hover  { color:var(--text); }
+    .acct-tabs .tab.active { color:var(--text); border-bottom-color:var(--accent); font-weight:600; }
+    .acct-tabs .grow       { flex:1; }
+    .acct-tab-pane { display:none; }
+    .acct-tab-pane.active { display:block; }
+
+    /* 表单 —— 双列 grid，input 一行一个 */
+    .acct-form-head {
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:14px; font-weight:700; font-size:15px;
+    }
+    .acct-form { display:grid; grid-template-columns:1fr 1fr; gap:14px 16px; }
+    @media (max-width:680px) { .acct-form { grid-template-columns:1fr; } }
+    .acct-form .field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+    .acct-form .field.full { grid-column:1 / -1; }
+    .acct-form .field-label { font-size:12px; color:var(--muted); font-weight:600; }
+    .acct-form input, .acct-form select { padding:10px 12px; }
+    .acct-form-actions {
+      display:flex; gap:10px; justify-content:flex-end; margin-top:6px;
+      padding-top:14px; border-top:1px solid var(--line);
+    }
+
+    /* 趋势图 —— 7 列 heatmap（按周一/周日为列），避免在窄面板里柱子溢出 */
+    .usage-toolbar {
+      display:flex; gap:8px; align-items:center; padding:0 0 12px;
+      flex-wrap:wrap;
+    }
+    .usage-toolbar .btn { padding:5px 10px; font-size:13px; }
+    .usage-toolbar select {
+      padding:5px 10px; font-size:13px; cursor:pointer;
+      min-width:90px;
+    }
+    .usage-toolbar .grow { flex:1; }
+    .usage-heat {
+      display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;
+      padding:14px; background:rgba(15,18,22,.35); border-radius:10px;
+      max-width:100%;
+    }
+    .usage-heat .hcell {
+      aspect-ratio:1 / 1; min-width:0;
+      border-radius:6px; background:rgba(112,184,255,.05);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:1px; font-family:"SF Mono", Menlo, monospace;
+      cursor:default; position:relative; transition:transform .12s, filter .12s;
+      border:1px solid transparent;
+    }
+    .usage-heat .hcell:hover { transform:scale(1.05); filter:brightness(1.2); border-color:var(--accent); }
+    .usage-heat .hcell.empty { background:rgba(255,255,255,.03); }
+    .usage-heat .hcell.is-today { border-color:var(--accent); }
+    .usage-heat .hcell.oom { opacity:.32; cursor:default; }
+    .usage-heat .hcell.oom .d { color:var(--muted); }
+    .usage-heat .hcell.oom:hover { transform:none; filter:none; border-color:transparent; }
+    .usage-heat .hcell .d  { font-size:11px; color:var(--text); font-weight:600; line-height:1; }
+    .usage-heat .hcell .tk { font-size:9px; color:var(--muted); line-height:1; margin-top:2px; }
+    .usage-heat .hcell.lv1 { background:rgba(112,184,255,.18); }
+    .usage-heat .hcell.lv2 { background:rgba(112,184,255,.32); }
+    .usage-heat .hcell.lv3 { background:linear-gradient(135deg, rgba(112,184,255,.5), rgba(181,140,255,.4)); }
+    .usage-heat .hcell.lv4 { background:linear-gradient(135deg, var(--accent), var(--purple)); color:#fff; }
+    .usage-heat .hcell.lv4 .tk { color:rgba(255,255,255,.85); }
+    .usage-heat .hcell .tip {
+      position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%);
+      background:var(--panel-2); border:1px solid var(--line); padding:6px 10px;
+      border-radius:6px; font-size:11px; white-space:nowrap; display:none; z-index:10;
+      box-shadow:0 4px 12px rgba(0,0,0,.4); pointer-events:none;
+    }
+    .usage-heat .hcell:hover .tip { display:block; }
+    .usage-heat-head {
+      display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;
+      padding:0 14px 6px; font-size:11px; color:var(--muted); text-align:center;
+    }
+    .usage-legend {
+      display:flex; gap:6px; align-items:center; padding:8px 14px 0;
+      font-size:11px; color:var(--muted);
+    }
+    .usage-legend .sw { width:14px; height:14px; border-radius:3px; }
+    .usage-axis .tick { flex:1; min-width:8px; text-align:center; overflow:hidden; }
+
+    /* turn 行的 token / 耗时 badge */
+    .turn-row .turn-meta .stat {
+      color:var(--muted); font-family:"SF Mono", Menlo, monospace; font-size:10.5px;
+    }
+    .turn-row .turn-meta .stat.tok { color:var(--accent); }
+    .turn-row .turn-meta .stat.lat { color:var(--ok); }
+
+    /* 多选模式 */
+    .turn-row .turn-meta .pick { display:none; align-items:center; }
+    .turn-row .turn-meta .pick input { margin:0 6px 0 0; }
+    .turns-multi-on .turn-row .turn-meta .pick { display:inline-flex; }
+    .session-card .pick { display:none; }
+    .sessions-multi-on .session-card .pick { display:inline-flex; align-items:center; }
+    .sessions-multi-on .session-head { cursor:default; }
   </style>
 </head>
 <body>
@@ -317,9 +743,11 @@
     <div class="navitem" data-page="profile"><span class="icon">👤</span>用户简介</div>
     <div class="navitem" data-page="pet"><span class="icon">🐾</span>宠物状态</div>
     <div class="navitem" data-page="memory"><span class="icon">🧠</span>记忆管理</div>
+    <div class="navitem" data-page="calendar"><span class="icon">📅</span>宠物日记</div>
     <div class="navitem" data-page="device"><span class="icon">📡</span>TablePet 状态</div>
     <div class="navitem" data-page="chat"><span class="icon">💬</span>对话</div>
     <div class="navitem" data-page="skills"><span class="icon">🎯</span>技能学习</div>
+    <div class="navitem" data-page="account"><span class="icon">💳</span>账户情况</div>
     <div class="sidebar-foot">
       <div class="row"><span>网关</span><span id="footGateway" class="badge muted">--</span></div>
       <div class="row" style="margin-top:6px"><span>设备</span><span id="footDevice" class="badge muted">--</span></div>
@@ -333,37 +761,77 @@
       <h2 class="page-title">👤 用户简介</h2>
       <div class="page-sub">告诉 TablePet 你是谁，它会更懂你。</div>
 
-      <div class="grid grid-2">
-        <div class="panel">
-          <div style="display:flex; gap:16px; align-items:center; margin-bottom:16px;">
-            <div class="avatar" id="profileAvatar">U</div>
-            <div>
-              <div style="font-size:18px; font-weight:600;" id="profileName">未命名用户</div>
-              <div class="small" id="profileMeta">点击右侧编辑资料</div>
-            </div>
+      <!-- 查看模式 -->
+      <div class="panel" id="profileView">
+        <div style="display:flex; gap:18px; align-items:center; margin-bottom:16px;">
+          <div class="avatar lg" id="profileAvatar" title="点击更换头像">
+            <span id="profileAvatarLetter">U</span>
+            <div class="avatar-edit">📷 更换头像</div>
           </div>
-          <div class="profile-row"><label>昵称</label><span id="viewName">--</span></div>
-          <div class="profile-row"><label>偏好语言</label><span id="viewLang">--</span></div>
-          <div class="profile-row"><label>性格 / 兴趣</label><span id="viewBio">--</span></div>
-          <div class="profile-row"><label>所在城市</label><span id="viewCity">--</span></div>
-          <div class="profile-row"><label>注册时间</label><span id="viewSince">--</span></div>
+          <input type="file" id="profileAvatarFile" accept="image/*" style="display:none;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:18px; font-weight:600;" id="profileName">未命名用户</div>
+            <div class="small" id="profileMeta">还没有填写资料</div>
+          </div>
+          <button class="btn primary" id="profileEditBtn">✏️ 编辑</button>
         </div>
+        <div class="profile-row"><label>昵称</label><span id="viewName">--</span></div>
+        <div class="profile-row"><label>偏好语言</label><span id="viewLang">--</span></div>
+        <div class="profile-row"><label>性格 / 兴趣</label><span id="viewBio">--</span></div>
+        <div class="profile-row"><label>所在城市</label><span id="viewCity">--</span></div>
+        <div class="profile-row"><label>注册时间</label><span id="viewSince">--</span></div>
 
-        <div class="panel">
-          <div class="panel-title">编辑资料</div>
-          <form id="profileForm" style="display:flex; flex-direction:column; gap:10px;">
-            <label class="small">昵称<input name="name" placeholder="比如：小明"></label>
-            <label class="small">偏好语言
-              <select name="language">
-                <option value="zh-CN">简体中文</option>
-                <option value="zh-TW">繁体中文</option>
-                <option value="en-US">English</option>
-              </select>
-            </label>
-            <label class="small">性格 / 兴趣<textarea name="bio" rows="3" placeholder="比如：喜欢科幻，怕冷，每天 11 点睡觉"></textarea></label>
-            <label class="small">所在城市<input name="city" placeholder="比如：Toronto"></label>
+        <div class="panel-title" style="margin-top:18px;">自定义字段</div>
+        <div id="customViewList"><div class="empty">暂无自定义字段</div></div>
+      </div>
+
+      <!-- 编辑模式 -->
+      <div class="panel" id="profileEdit" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div class="panel-title" style="margin:0">编辑资料</div>
+          <button class="btn" id="profileCancelBtn">取消</button>
+        </div>
+        <form id="profileForm" class="form-grid cols-2">
+          <div class="field">
+            <span class="field-label">昵称</span>
+            <input name="name" placeholder="比如：小明">
+          </div>
+          <div class="field">
+            <span class="field-label">偏好语言</span>
+            <select name="language">
+              <option value="zh-CN">简体中文</option>
+              <option value="zh-TW">繁体中文</option>
+              <option value="en-US">English</option>
+            </select>
+          </div>
+          <div class="field full">
+            <span class="field-label">性格 / 兴趣</span>
+            <textarea name="bio" rows="3" placeholder="比如：喜欢科幻，怕冷，每天 11 点睡觉"></textarea>
+          </div>
+          <div class="field">
+            <span class="field-label">所在城市</span>
+            <input name="city" placeholder="比如：Toronto">
+          </div>
+          <div class="field full form-actions">
             <button type="submit" class="btn primary">保存</button>
-          </form>
+          </div>
+        </form>
+
+        <div class="panel-title" style="margin-top:20px;">自定义字段</div>
+        <div class="small" style="margin-bottom:10px;">支持任意 key/value，agent 在生成回复时会一并参考。</div>
+        <div id="customEditList"></div>
+        <div class="form-grid cols-2" style="margin-top:8px;">
+          <div class="field">
+            <span class="field-label">字段名</span>
+            <input id="customNewKey" placeholder="比如 hobby">
+          </div>
+          <div class="field">
+            <span class="field-label">字段值</span>
+            <input id="customNewValue" placeholder="比如 弹钢琴">
+          </div>
+          <div class="field full form-actions">
+            <button class="btn primary" id="customAddBtn">添加字段</button>
+          </div>
         </div>
       </div>
     </section>
@@ -375,7 +843,11 @@
 
       <div class="grid grid-2">
         <div class="pet-stage">
-          <div class="pet-emoji" id="petEmoji">😺</div>
+          <div class="avatar lg" id="petAvatar" style="margin-bottom:8px;" title="点击更换形象">
+            <span id="petAvatarFallback" class="pet-emoji" style="font-size:64px;">😺</span>
+            <div class="avatar-edit">📷 更换形象</div>
+          </div>
+          <input type="file" id="petAvatarFile" accept="image/*" style="display:none;">
           <div class="pet-name" id="petName">小桌</div>
           <div class="pet-mood" id="petMood">心情很好</div>
           <div class="pet-actions">
@@ -405,17 +877,73 @@
           </div>
         </div>
       </div>
+
+      <!-- 人格切换 —— 数据驱动，可选项由 /api/personas 决定 -->
+      <div class="panel" id="personaPanel" style="margin-top:14px;">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title" style="margin:0;">人格切换</div>
+            <div class="small" id="personaActiveLabel">加载中…</div>
+          </div>
+          <label class="switch" title="开启后每条消息都会随机一个人格">
+            <input type="checkbox" id="personaRandomToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <!-- 随机模式提示横幅：开关打开时显示，人格卡片网格隐藏 -->
+        <div id="personaRandomBanner" class="persona-random-banner" style="display:none; margin-top:12px;">
+          <div class="title">🎲 随机模式已开启</div>
+          <div class="small">每次发送消息时，桌宠都会从下面这些人格里临时抽一个来回复你 —— 风格不固定，可能上一句傲娇下一句古风。<br>关闭这个开关，下面的人格卡片才会出现。</div>
+        </div>
+        <div id="personaGrid" class="persona-grid" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- 桌宠资料：默认只展示，点修改才弹表单 -->
+      <div class="panel" id="petInfoView" style="margin-top:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div class="panel-title" style="margin:0;">桌宠资料</div>
+          <button class="btn" id="petInfoEditBtn">✏️ 修改</button>
+        </div>
+        <div class="profile-row"><label>名字</label><span id="petInfoName">--</span></div>
+        <div class="profile-row"><label>人设</label><span id="petInfoPersona">--</span></div>
+        <div class="profile-row"><label>口头禅</label><span id="petInfoTagline">--</span></div>
+        <div class="small" id="petInfoMeta" style="margin-top:8px;">--</div>
+      </div>
+
+      <div class="panel" id="petInfoEdit" style="margin-top:14px; display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div class="panel-title" style="margin:0;">编辑桌宠资料</div>
+          <button class="btn" id="petInfoCancelBtn">取消</button>
+        </div>
+        <form id="petInfoForm" class="form-grid">
+          <div class="field">
+            <span class="field-label">名字</span>
+            <input name="name" placeholder="比如：小桌">
+          </div>
+          <div class="field">
+            <span class="field-label">人设描述（性格、设定、说话风格）</span>
+            <textarea name="persona" rows="3" placeholder="比如：好奇心强，喜欢撒娇，会用颜文字"></textarea>
+          </div>
+          <div class="field">
+            <span class="field-label">口头禅 / 自我介绍</span>
+            <input name="tagline" placeholder="比如：喵～我是负责陪你的小桌！">
+          </div>
+          <div class="field form-actions">
+            <button type="submit" class="btn primary">保存</button>
+          </div>
+        </form>
+      </div>
     </section>
 
     <!-- ====== 3. 记忆管理 ====== -->
     <section id="page-memory" class="page">
       <h2 class="page-title">🧠 记忆管理</h2>
-      <div class="page-sub">查看和编辑 TablePet 记住的事。</div>
+      <div class="page-sub">所有通道（web / wifi / usb）共享同一份记忆。</div>
 
       <div class="grid grid-2">
         <div class="panel">
-          <div class="panel-title">长期画像（profile）</div>
-          <div class="memory-list" id="profileList"><div class="empty">暂无记忆</div></div>
+          <div class="panel-title">长期画像（profile facts）</div>
+          <div class="memory-list compact" id="profileList"><div class="empty">暂无记忆</div></div>
           <div class="memory-add">
             <input id="newMemory" placeholder="比如：我喜欢喝拿铁">
             <button class="btn primary" id="addMemoryBtn">添加</button>
@@ -424,14 +952,65 @@
 
         <div class="panel">
           <div class="panel-title">最近对话（recent）</div>
-          <div id="recentList" class="memory-list"><div class="empty">暂无对话</div></div>
+          <div id="recentList" class="memory-list compact"><div class="empty">暂无对话</div></div>
+          <div style="margin-top:10px; text-align:right;">
+            <button class="btn danger" id="clearRecentBtn">清空最近对话</button>
+          </div>
         </div>
       </div>
 
       <div class="panel" style="margin-top:14px;">
-        <div class="panel-title">设备选择</div>
-        <select id="memoryDeviceSel" style="width:240px"></select>
-        <span class="small" style="margin-left:12px">记忆按设备 ID 隔离</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div class="panel-title" style="margin:0;">会话流水</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span class="small" id="sessionsActiveLabel">--</span>
+            <button class="btn" id="sessionsMultiBtn">☑ 多选</button>
+            <button class="btn danger" id="sessionsBatchDelBtn" style="display:none;">删除选中</button>
+            <button class="btn" id="sessionsRefreshBtn">🔄 刷新</button>
+          </div>
+        </div>
+        <div id="sessionList" class="memory-list">
+          <div class="empty">点击右上角刷新加载</div>
+        </div>
+        <div style="text-align:center; margin-top:8px;">
+          <button class="btn" id="sessionsLoadMoreBtn" style="display:none;">加载更早 ⌄</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 3.5 宠物日记 ====== -->
+    <section id="page-calendar" class="page">
+      <h2 class="page-title">📅 宠物日记</h2>
+      <div class="page-sub">每天和桌宠的对话总结。点击日期查看当天日记。</div>
+
+      <div class="grid grid-2">
+        <div class="panel">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <button class="btn" id="calPrev">‹</button>
+            <div id="calLabel" style="flex:1; text-align:center; font-weight:600; font-size:16px;"></div>
+            <button class="btn" id="calNext">›</button>
+            <button class="btn" id="calToday">今天</button>
+          </div>
+          <div id="calGrid" class="cal-grid"></div>
+          <div class="small" style="margin-top:10px;">深色 = 当天有总结</div>
+        </div>
+
+        <div class="panel">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="panel-title" id="dayTitle" style="margin:0;">选择日期</div>
+            <button class="btn" id="reSummarizeBtn" style="display:none;">🔄 重新总结</button>
+          </div>
+          <div id="dayBody" class="empty">点击左侧日期查看日记</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px;">
+        <div class="panel-title">AI 维护的用户画像</div>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+          <button class="btn" id="refreshAiProfileBtn">🔄 重新生成</button>
+          <span class="small" id="aiProfileMeta">--</span>
+        </div>
+        <div id="aiProfileBody" class="empty">还没有生成</div>
       </div>
     </section>
 
@@ -473,7 +1052,7 @@
 
       <div class="chat-wrap">
         <div class="chat-log" id="chatLog">
-          <div class="msg"><div class="who">🐱</div><div class="bubble">嗨！我是 TablePet，今天想聊点啥？</div></div>
+          <div class="msg" id="chatGreeting"><div class="who">🐱</div><div class="bubble">…</div></div>
         </div>
         <div class="chat-options">
           <label><input type="checkbox" id="chatTtsToggle"> 朗读回复（TTS）</label>
@@ -506,7 +1085,170 @@
 
       <div class="grid grid-3" id="skillGrid"></div>
     </section>
+
+    <!-- ====== 7. 账户情况 ====== -->
+    <section id="page-account" class="page">
+      <h2 class="page-title">💳 账户情况</h2>
+      <div class="page-sub">配置 LLM 账号、查看用量趋势。改完立即生效，无需重启。</div>
+
+      <!-- ① 顶部 hero：当前生效 + 4 个数字卡 -->
+      <div class="acct-hero" id="acctHero">
+        <div class="acct-hero-left">
+          <div class="acct-hero-label">当前生效账号</div>
+          <div class="acct-hero-name" id="acctHeroName">未配置</div>
+          <div class="acct-hero-meta" id="acctHeroMeta">点右下角“+ 新增账号”开始</div>
+        </div>
+        <div class="acct-hero-stats">
+          <div class="kpi"><div class="kpi-num" id="acctTodayTokens">--</div><div class="kpi-label">今日 token</div></div>
+          <div class="kpi"><div class="kpi-num" id="acctTodayCalls">--</div><div class="kpi-label">今日调用</div></div>
+          <div class="kpi"><div class="kpi-num" id="acctTrendTotal">--</div><div class="kpi-label">本月用量</div></div>
+          <div class="kpi"><div class="kpi-num" id="acctHeroBalance">--</div><div class="kpi-label">余额</div></div>
+        </div>
+      </div>
+
+      <!-- ② 账号列表 -->
+      <div class="panel" style="margin-top:16px;">
+        <div class="panel-head">
+          <div class="panel-title" style="margin:0;">已配置账号</div>
+          <button class="btn primary" id="acctAddBtn">+ 新增账号</button>
+        </div>
+        <div id="acctList" class="acct-list"><div class="empty">还没有配置 LLM 账号</div></div>
+      </div>
+
+      <!-- ③ Tab 切换：用量趋势 / 新增/编辑 -->
+      <div class="panel" style="margin-top:16px;">
+        <div class="acct-tabs">
+          <div class="tab active" data-acct-tab="trend">📈 用量趋势</div>
+          <div class="tab" data-acct-tab="form">✏️ 编辑账号</div>
+          <div class="grow"></div>
+          <span class="small" id="acctTabHint">近 30 天每日 token 总量</span>
+        </div>
+
+        <!-- 趋势 -->
+        <div class="acct-tab-pane active" data-pane="trend">
+          <div class="usage-toolbar">
+            <button class="btn" id="acctMonthPrev" title="上一月">‹</button>
+            <select id="acctYearSel"></select>
+            <select id="acctMonthSel"></select>
+            <button class="btn" id="acctMonthNext" title="下一月">›</button>
+            <button class="btn" id="acctMonthToday" title="回到本月">本月</button>
+            <span class="grow"></span>
+            <span class="small" id="acctMonthStat">--</span>
+          </div>
+          <div class="usage-heat-head" id="acctHeatHead"></div>
+          <div class="usage-heat" id="acctChart"></div>
+          <div class="usage-legend">
+            <span>少</span>
+            <span class="sw" style="background:rgba(255,255,255,.03);"></span>
+            <span class="sw lv1" style="background:rgba(112,184,255,.18);"></span>
+            <span class="sw lv2" style="background:rgba(112,184,255,.32);"></span>
+            <span class="sw lv3" style="background:linear-gradient(135deg, rgba(112,184,255,.5), rgba(181,140,255,.4));"></span>
+            <span class="sw lv4" style="background:linear-gradient(135deg, var(--accent), var(--purple));"></span>
+            <span>多</span>
+            <span style="margin-left:auto;" id="acctAxis"></span>
+          </div>
+        </div>
+
+        <!-- 表单 -->
+        <div class="acct-tab-pane" data-pane="form">
+          <div class="acct-form-head">
+            <span id="acctEditTitle">新增账号</span>
+            <button class="btn" id="acctEditCancel" style="display:none;">取消编辑</button>
+          </div>
+          <form id="acctForm" class="acct-form">
+            <div class="field">
+              <span class="field-label">服务商</span>
+              <select name="provider">
+                <option value="deepseek">DeepSeek</option>
+                <option value="openai">OpenAI</option>
+                <option value="moonshot">Moonshot</option>
+                <option value="qwen">通义千问 (Qwen)</option>
+                <option value="zhipu">智谱 (GLM)</option>
+                <option value="custom">自定义 / 其它</option>
+              </select>
+            </div>
+            <div class="field">
+              <span class="field-label">备注名（自己看的）</span>
+              <input name="label" placeholder="比如：DeepSeek 主力">
+            </div>
+
+            <div class="field full">
+              <span class="field-label">Base URL</span>
+              <input name="base_url" placeholder="https://api.deepseek.com">
+            </div>
+            <div class="field full">
+              <span class="field-label">API Key</span>
+              <input name="api_key" placeholder="sk-..." autocomplete="off">
+            </div>
+
+            <div class="field">
+              <span class="field-label">主对话模型</span>
+              <input name="chat_model" placeholder="比如：deepseek-chat">
+            </div>
+            <div class="field">
+              <span class="field-label">总结模型（便宜一点）</span>
+              <input name="summary_model" placeholder="比如：deepseek-chat">
+            </div>
+
+            <div class="field">
+              <span class="field-label">余额（手动录入）</span>
+              <input name="balance" type="number" step="0.01" placeholder="0.00">
+            </div>
+            <div class="field">
+              <span class="field-label">币种</span>
+              <select name="balance_currency">
+                <option value="CNY">CNY ¥</option>
+                <option value="USD">USD $</option>
+                <option value="EUR">EUR €</option>
+              </select>
+            </div>
+
+            <div class="field full acct-form-actions">
+              <button type="button" class="btn" id="acctFormReset">清空</button>
+              <button type="submit" class="btn primary">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
   </main>
+</div>
+
+<!-- ==================== 全局底部状态栏 ==================== -->
+<div id="footerBar">
+  <div class="item">💰 余额：<span class="num" id="footerBalance">--</span></div>
+  <div class="item">⚡ 今日 token：<span class="num" id="footerTokens">--</span></div>
+  <div class="item">📞 调用：<span class="num" id="footerCalls">--</span> 次</div>
+  <div class="grow"></div>
+  <a id="footerOpenAccount">前往账户管理 →</a>
+</div>
+
+<!-- ==================== 会话独立悬浮窗 ==================== -->
+<div id="sessionViewerMask">
+  <div id="sessionViewerBox">
+    <div class="viewer-head">
+      <div>
+        <h3 id="sessionViewerTitle">会话</h3>
+        <div class="small" id="sessionViewerMeta"></div>
+      </div>
+      <button class="close-x" id="sessionViewerClose">✕</button>
+    </div>
+    <div id="sessionViewerSummary"></div>
+    <div id="sessionViewerBody" class="viewer-body"></div>
+    <div id="sessionViewerActions" class="viewer-actions"></div>
+  </div>
+</div>
+
+<!-- ==================== Confirm 弹窗 ==================== -->
+<div id="confirmMask">
+  <div id="confirmBox">
+    <h3 id="confirmTitle">确认</h3>
+    <div class="body" id="confirmBody"></div>
+    <div class="actions">
+      <button class="btn" id="confirmCancel">取消</button>
+      <button class="btn primary" id="confirmOk">确定</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -587,12 +1329,47 @@ async function api(method, url, body) {
 }
 
 /* =====================================================================
+   全局 Confirm 弹窗（替代原生 confirm，async/await 风格）
+   ===================================================================== */
+let _confirmResolver = null;
+function confirmDialog({ title='确认操作', body='', okText='确定', cancelText='取消', danger=false } = {}) {
+  return new Promise(resolve => {
+    _confirmResolver = resolve;
+    $('confirmTitle').textContent = title;
+    $('confirmBody').textContent = body;
+    const okBtn = $('confirmOk');
+    okBtn.textContent = okText;
+    okBtn.classList.toggle('danger', !!danger);
+    okBtn.classList.toggle('primary', !danger);
+    $('confirmCancel').textContent = cancelText;
+    $('confirmMask').classList.add('show');
+    setTimeout(() => okBtn.focus(), 50);
+  });
+}
+function _closeConfirm(result) {
+  $('confirmMask').classList.remove('show');
+  if (_confirmResolver) { _confirmResolver(result); _confirmResolver = null; }
+}
+$('confirmOk').addEventListener('click', () => _closeConfirm(true));
+$('confirmCancel').addEventListener('click', () => _closeConfirm(false));
+$('confirmMask').addEventListener('click', (e) => { if (e.target === $('confirmMask')) _closeConfirm(false); });
+document.addEventListener('keydown', (e) => {
+  if (!$('confirmMask').classList.contains('show')) return;
+  if (e.key === 'Escape') _closeConfirm(false);
+  if (e.key === 'Enter')  _closeConfirm(true);
+});
+
+/* =====================================================================
    主题 / 背景设置
    --------------------------------------------------------------------
-   纯前端实现，所有设置都存 localStorage（key: tablepet.theme）。
-   后端零改动。后续若想云同步，可以接：
-   API: GET  /api/user/theme  ->  { kind, value, darkness, blur }
-   API: PUT  /api/user/theme  { ... }  ->  { ok }
+   单一真理源：后端 SQLite (ui_settings 表，key='theme')。
+   localStorage 仅作为离线缓存：
+     - 启动时优先用 cache 让首屏不闪白；
+     - 异步从后端拉取，覆盖 cache；
+     - 每次保存 server-first，server 失败也写 cache 防丢。
+
+   API: GET    /api/ui-settings/theme        ->  { key, value }
+   API: PUT    /api/ui-settings/theme  { value:{...} }
    ===================================================================== */
 const THEME_KEY = 'tablepet.theme';
 const PRESETS = [
@@ -607,12 +1384,37 @@ const PRESETS = [
   { id:'unsplash-city',     label:'城市', kind:'url', value:'https://images.unsplash.com/photo-1493514789931-586cb221d7a7?w=2000&q=80' },
 ];
 
+let _themeCache = null;
+function loadThemeCache() {
+  if (_themeCache) return _themeCache;
+  try { _themeCache = JSON.parse(localStorage.getItem(THEME_KEY) || '{}'); }
+  catch { _themeCache = {}; }
+  return _themeCache;
+}
 function loadTheme() {
-  try { return JSON.parse(localStorage.getItem(THEME_KEY) || '{}'); } catch { return {}; }
+  return _themeCache || loadThemeCache();
+}
+async function fetchThemeFromServer() {
+  try {
+    const r = await api('GET', '/api/ui-settings/theme');
+    if (r && r.value) {
+      _themeCache = r.value;
+      try { localStorage.setItem(THEME_KEY, JSON.stringify(r.value)); } catch {}
+      applyTheme(r.value);
+    }
+  } catch (e) {
+    // 404 = 服务器还没有保存过；保持当前 cache 即可
+  }
 }
 function saveTheme(t) {
+  _themeCache = t;
+  // 1) 先写后端（真理源）
+  api('PUT', '/api/ui-settings/theme', { value: t }).catch((e) => {
+    toast('云端保存失败：' + e.message, 'error');
+  });
+  // 2) 再写 cache（离线 / 首屏 / 后端不可用兜底）
   try { localStorage.setItem(THEME_KEY, JSON.stringify(t)); }
-  catch (e) { toast('保存失败：图片可能太大', 'error'); }
+  catch { /* 配额超时只丢缓存，后端那份不受影响 */ }
 }
 function applyTheme(t = loadTheme()) {
   const layer = document.getElementById('bgLayer');
@@ -697,20 +1499,54 @@ document.getElementById('bgUrlApply').addEventListener('click', () => {
   const next = { ...cur, preset:'', kind:'url', value:url };
   saveTheme(next); applyTheme(next); toast('已应用图片');
 });
-document.getElementById('bgFile').addEventListener('change', (e) => {
+/** 把 File 转成压缩过的 dataURL：等比缩到最长边 ≤ MAX_EDGE，JPEG 0.82。
+ *  原图 6000×4000 → 2000×1333；6MB JPEG 通常压到 ≤500KB。
+ *  PNG 透明背景会变黑底 —— 桌面壁纸场景里 JPEG 体积/质量 trade-off 更值。
+ */
+async function compressImageToDataURL(file, maxEdge = 2000, quality = 0.82) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = url;
+    });
+    let { width, height } = img;
+    if (width > maxEdge || height > maxEdge) {
+      const ratio = Math.min(maxEdge / width, maxEdge / height);
+      width = Math.round(width * ratio);
+      height = Math.round(height * ratio);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', quality);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+document.getElementById('bgFile').addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
-  if (file.size > 4 * 1024 * 1024) {
-    toast('图片超过 4MB，可能保存失败', 'error');
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
+  toast('正在压缩图片…');
+  try {
+    const dataUrl = await compressImageToDataURL(file);
+    const beforeKB = (file.size / 1024).toFixed(0);
+    const afterKB = (dataUrl.length * 0.75 / 1024).toFixed(0); // base64 ≈ 1.33×
     const cur = loadTheme();
-    const next = { ...cur, preset:'', kind:'data', value:reader.result };
+    const next = { ...cur, preset:'', kind:'data', value:dataUrl };
     saveTheme(next); applyTheme(next);
-    toast('已应用本地图片');
-  };
-  reader.readAsDataURL(file);
+    toast(`已应用本地图片（${beforeKB}KB → ~${afterKB}KB）`);
+  } catch (err) {
+    toast('图片处理失败：' + (err && err.message ? err.message : err), 'error');
+  } finally {
+    // 允许同一张图反复选取
+    e.target.value = '';
+  }
 });
 document.getElementById('bgDarkness').addEventListener('input', (e) => {
   const v = +e.target.value;
@@ -733,7 +1569,8 @@ document.addEventListener('keydown', (e) => {
 
 // 启动时初始化
 renderPresets();
-applyTheme();
+applyTheme();          // 先用本地缓存，让首屏不闪白
+fetchThemeFromServer(); // 异步从 SQLite 拉真值，覆盖缓存
 
 /* =====================================================================
    欢迎页
@@ -762,89 +1599,231 @@ function showPage(id) {
 $$('.navitem').forEach(n => n.addEventListener('click', () => {
   location.hash = '#' + n.dataset.page;
 }));
-window.addEventListener('hashchange', () => showPage(location.hash.slice(1) || 'profile'));
+window.addEventListener('hashchange', () => {
+  const page = location.hash.slice(1) || 'profile';
+  showPage(page);
+  // 进入"记忆"页时自动拉一次会话流水
+  if (page === 'memory') {
+    _sessionsBeforeId = null;
+    if (typeof refreshSessions === 'function') refreshSessions({ append: false });
+  }
+});
 showPage(location.hash.slice(1) || 'profile');
 
 /* =====================================================================
    1) 用户简介
    --------------------------------------------------------------------
-   API: GET  /api/user/profile           ->  { name, language, bio, city, since }
-   API: PUT  /api/user/profile  { ... }  ->  { ok }
+   API: GET    /api/user/profile                 ->  { name, language, bio, city, since, custom:{...} }
+   API: PUT    /api/user/profile     { ... }     ->  { ok, profile }
+   API: PUT    /api/user/profile/custom/{key}    { value }  ->  { ok, profile }
+   API: DELETE /api/user/profile/custom/{key}    ->  { ok, profile }
+
+   单一真理源：后端 SQLite。前端只读 + 编辑提交，不再用 localStorage。
    ===================================================================== */
-const PROFILE_KEY = 'tablepet.profile';
-function loadProfileLocal() {
-  try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}'); } catch { return {}; }
-}
+let _profileCache = null;
+
 async function fetchProfile() {
   try {
-    return await api('GET', '/api/user/profile');
+    _profileCache = await api('GET', '/api/user/profile');
   } catch {
-    // 后端尚未实现，回退到本地缓存
-    return loadProfileLocal();
+    _profileCache = { name:'', language:'', bio:'', city:'', since:'', custom:{} };
   }
-}
-async function saveProfile(p) {
-  try {
-    await api('PUT', '/api/user/profile', p);
-  } catch {
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-  }
+  return _profileCache;
 }
 function renderProfile(p) {
   const name = p.name || '未命名用户';
-  $('profileAvatar').textContent = (name[0] || 'U').toUpperCase();
+  const letter = (name[0] || 'U').toUpperCase();
+  // 头像：有 dataURL 用图片，否则用首字母
+  const avatarEl = $('profileAvatar');
+  if (avatarEl) {
+    const existingImg = avatarEl.querySelector('img');
+    if (p.avatar) {
+      if (existingImg) existingImg.src = p.avatar;
+      else {
+        const img = document.createElement('img');
+        img.src = p.avatar;
+        avatarEl.insertBefore(img, avatarEl.firstChild);
+      }
+      $('profileAvatarLetter').style.display = 'none';
+    } else {
+      if (existingImg) existingImg.remove();
+      $('profileAvatarLetter').style.display = '';
+      $('profileAvatarLetter').textContent = letter;
+    }
+  }
   $('profileName').textContent = name;
-  $('profileMeta').textContent = p.language ? `语言：${p.language}` : '点击右侧编辑资料';
+  $('profileMeta').textContent = p.language ? `语言：${p.language}` : '点击右上角编辑资料';
   $('viewName').textContent = name;
   $('viewLang').textContent = p.language || '--';
   $('viewBio').textContent = p.bio || '--';
   $('viewCity').textContent = p.city || '--';
   $('viewSince').textContent = p.since ? new Date(p.since).toLocaleDateString() : '--';
-  for (const f of ['name','language','bio','city']) {
-    const el = $('profileForm').elements[f];
-    if (el) el.value = p[f] || '';
+  // 同步表单 —— 仅在用户没在编辑时刷写，避免覆盖正在输入的内容
+  const editing = $('profileEdit') && $('profileEdit').style.display !== 'none';
+  if (!editing) {
+    for (const f of ['name','language','bio','city']) {
+      const el = $('profileForm').elements[f];
+      if (el) el.value = p[f] || '';
+    }
   }
+  renderCustomView(p.custom || {});
+  renderCustomEdit(p.custom || {});
 }
+function renderCustomView(custom) {
+  const entries = Object.entries(custom || {});
+  $('customViewList').innerHTML = entries.length
+    ? entries.map(([k,v]) => `
+        <div class="profile-row">
+          <label>${escapeHtml(k)}</label>
+          <span>${escapeHtml(v)}</span>
+        </div>`).join('')
+    : '<div class="empty">暂无自定义字段</div>';
+}
+function renderCustomEdit(custom) {
+  const entries = Object.entries(custom || {});
+  $('customEditList').innerHTML = entries.length
+    ? entries.map(([k,v]) => `
+        <div class="memory-item">
+          <strong style="min-width:80px;">${escapeHtml(k)}</strong>
+          <input class="text custom-edit-input" data-key="${escapeHtml(k)}" value="${escapeHtml(v)}">
+          <button class="btn danger" data-del="${escapeHtml(k)}">删除</button>
+        </div>`).join('')
+    : '<div class="empty">暂无自定义字段</div>';
+  // 绑定保存（失焦或回车）
+  $('customEditList').querySelectorAll('.custom-edit-input').forEach(inp => {
+    const save = async () => {
+      const key = inp.dataset.key;
+      const value = inp.value;
+      try {
+        await api('PUT', `/api/user/profile/custom/${encodeURIComponent(key)}`, { value });
+        toast(`已更新 ${key}`);
+        renderProfile(await fetchProfile());
+      } catch (e) { toast('保存失败：' + e.message, 'error'); }
+    };
+    inp.addEventListener('blur', save);
+    inp.addEventListener('keydown', e => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    });
+  });
+  $('customEditList').querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const key = btn.dataset.del;
+      try {
+        await api('DELETE', `/api/user/profile/custom/${encodeURIComponent(key)}`);
+        toast(`已删除 ${key}`);
+        renderProfile(await fetchProfile());
+      } catch (e) { toast('删除失败：' + e.message, 'error'); }
+    });
+  });
+}
+
+$('profileEditBtn').addEventListener('click', () => {
+  $('profileView').style.display = 'none';
+  $('profileEdit').style.display = '';
+});
+$('profileCancelBtn').addEventListener('click', () => {
+  $('profileEdit').style.display = 'none';
+  $('profileView').style.display = '';
+});
 $('profileForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
-  const local = loadProfileLocal();
   const data = {
     name: fd.get('name') || '',
     language: fd.get('language') || 'zh-CN',
     bio: fd.get('bio') || '',
     city: fd.get('city') || '',
-    since: local.since || new Date().toISOString(),
   };
-  await saveProfile(data);
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(data));
-  renderProfile(data);
-  toast('资料已保存');
+  try {
+    const r = await api('PUT', '/api/user/profile', data);
+    _profileCache = r.profile || _profileCache;
+    renderProfile(_profileCache);
+    toast('资料已保存');
+    $('profileEdit').style.display = 'none';
+    $('profileView').style.display = '';
+  } catch (e) { toast('保存失败：' + e.message, 'error'); }
+});
+$('customAddBtn').addEventListener('click', async () => {
+  const key = $('customNewKey').value.trim();
+  const value = $('customNewValue').value;
+  if (!key) { toast('字段名不能为空', 'error'); return; }
+  try {
+    await api('PUT', `/api/user/profile/custom/${encodeURIComponent(key)}`, { value });
+    $('customNewKey').value = ''; $('customNewValue').value = '';
+    toast(`已添加 ${key}`);
+    renderProfile(await fetchProfile());
+  } catch (e) { toast('添加失败：' + e.message, 'error'); }
+});
+
+// 给 chat 用：根据 profile.name 生成稳定 device_id
+function currentChatDeviceId() {
+  const name = (_profileCache && _profileCache.name) || '';
+  return name ? `web-${name}` : 'web-dashboard';
+}
+
+/* ---------- 头像上传通用辅助 ---------- */
+async function uploadAvatar(key, file) {
+  if (!file) return null;
+  toast('正在压缩头像…');
+  try {
+    const dataUrl = await compressImageToDataURL(file, 512, 0.85);  // 头像不需要太大
+    await api('PUT', `/api/ui-settings/${key}`, { value: dataUrl });
+    return dataUrl;
+  } catch (e) {
+    toast('上传失败：' + (e?.message || e), 'error');
+    return null;
+  }
+}
+
+// 用户头像：点击触发文件选择
+$('profileAvatar').addEventListener('click', () => $('profileAvatarFile').click());
+$('profileAvatarFile').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  const url = await uploadAvatar('user_avatar', file);
+  if (url) {
+    toast('头像已更新');
+    renderProfile(await fetchProfile());
+  }
 });
 
 /* =====================================================================
    2) 宠物状态
    --------------------------------------------------------------------
-   API: GET  /api/pet/status                        ->  { name, mood, energy, mood_score, exp, level, last_interact, days, emoji }
+   API: GET  /api/pet/status                        ->  { name, mood, mood_score, energy, exp, level, last_interact_ts, since_ts, days }
    API: POST /api/pet/interact   { action }         ->  { ok, status }   action ∈ feed/pet/play/sleep
+   API: PUT  /api/pet/status     { ... }            ->  { ok, status }   高级：直接覆盖字段
+
+   单一真理源：后端 SQLite。前端不再用 mock 数据，刷新也不会乱跳。
    ===================================================================== */
 const MOOD_EMOJI = { happy:'😺', neutral:'🐱', sleepy:'😴', hungry:'😿', excited:'😸', sick:'🤒' };
-function mockPetStatus() {
-  const seed = Date.now() % 1000;
-  return {
-    name: '小桌', emoji:'😺', mood:'happy',
-    energy: 70 + (seed % 30), mood_score: 60 + (seed % 40),
-    exp: seed % 100, level: 3, last_interact: Date.now()/1000 - 240,
-    days: 12,
-  };
-}
+const MOOD_LABEL = { happy:'心情很好', neutral:'有点平静', sleepy:'好困', hungry:'饿了', excited:'超开心！', sick:'不太舒服' };
 async function refreshPet() {
   let s;
   try { s = await api('GET', '/api/pet/status'); }
-  catch { s = mockPetStatus(); }
-  $('petEmoji').textContent = MOOD_EMOJI[s.mood] || s.emoji || '🐱';
+  catch { return; }  // 后端取不到就保持原 UI，不再用随机 mock
+  // 头像：有 dataURL 用图片，否则 fallback 到 emoji
+  const avEl = $('petAvatar');
+  if (avEl) {
+    const existing = avEl.querySelector('img');
+    if (s.avatar) {
+      if (existing) existing.src = s.avatar;
+      else {
+        const img = document.createElement('img');
+        img.src = s.avatar;
+        avEl.insertBefore(img, avEl.firstChild);
+      }
+      $('petAvatarFallback').style.display = 'none';
+    } else {
+      if (existing) existing.remove();
+      $('petAvatarFallback').style.display = '';
+      $('petAvatarFallback').textContent = MOOD_EMOJI[s.mood] || '🐱';
+    }
+  }
   $('petName').textContent = s.name || '小桌';
-  $('petMood').textContent = ({happy:'心情很好',neutral:'有点平静',sleepy:'好困',hungry:'饿了',excited:'超开心！',sick:'不太舒服'})[s.mood] || s.mood;
+  $('petMood').textContent = MOOD_LABEL[s.mood] || s.mood;
   $('energyVal').textContent = s.energy + '/100';
   $('moodVal').textContent = s.mood_score + '/100';
   $('expVal').textContent = (s.exp || 0) + '/100';
@@ -852,15 +1831,82 @@ async function refreshPet() {
   $('energyBar').style.width = Math.min(100, s.energy) + '%';
   $('moodBar').style.width = Math.min(100, s.mood_score) + '%';
   $('expBar').style.width = Math.min(100, s.exp || 0) + '%';
-  $('lastInteract').textContent = s.last_interact ? new Date(s.last_interact*1000).toLocaleString() : '--';
+  $('lastInteract').textContent = s.last_interact_ts ? new Date(s.last_interact_ts*1000).toLocaleString() : '--';
   $('companionDays').textContent = s.days || 0;
+  // 资料视图
+  $('petInfoName').textContent = s.name || '--';
+  $('petInfoPersona').textContent = s.persona || '--';
+  $('petInfoTagline').textContent = s.tagline || '--';
+  // 填充编辑表单 —— ⚠️ 只在用户没在编辑时才覆盖 input，
+  // 否则 5 秒一次的轮询会把用户正在打的字给冲掉。
+  const editPanel = $('petInfoEdit');
+  const isEditing = editPanel && editPanel.style.display !== 'none';
+  if (!isEditing) {
+    const form = $('petInfoForm');
+    if (form) {
+      if (form.elements['name'])    form.elements['name'].value    = s.name    || '';
+      if (form.elements['persona']) form.elements['persona'].value = s.persona || '';
+      if (form.elements['tagline']) form.elements['tagline'].value = s.tagline || '';
+    }
+  }
+  const meta = $('petInfoMeta');
+  if (meta) {
+    meta.textContent = s.updated_at ? '上次修改：' + new Date(s.updated_at*1000).toLocaleString() : '尚未修改过';
+  }
 }
+
+// 编辑模式切换
+$('petInfoEditBtn').addEventListener('click', () => {
+  $('petInfoView').style.display = 'none';
+  $('petInfoEdit').style.display = '';
+});
+$('petInfoCancelBtn').addEventListener('click', () => {
+  $('petInfoEdit').style.display = 'none';
+  $('petInfoView').style.display = '';
+});
+$('petInfoForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const payload = {
+    name:    (fd.get('name')    || '').toString(),
+    persona: (fd.get('persona') || '').toString(),
+    tagline: (fd.get('tagline') || '').toString(),
+  };
+  try {
+    await api('PUT', '/api/pet/status', payload);
+    toast('已保存桌宠资料');
+    $('petInfoEdit').style.display = 'none';
+    $('petInfoView').style.display = '';
+    refreshPet();
+  } catch (err) { toast('保存失败：' + err.message, 'error'); }
+});
+
+// 桌宠头像
+$('petAvatar').addEventListener('click', () => $('petAvatarFile').click());
+$('petAvatarFile').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  const url = await uploadAvatar('pet_avatar', file);
+  if (url) {
+    toast('桌宠形象已更新');
+    refreshPet();
+  }
+});
 document.querySelectorAll('.pet-actions .btn').forEach(b => {
   b.addEventListener('click', async () => {
     const action = b.dataset.act;
-    try { await api('POST', '/api/pet/interact', { action }); }
-    catch { /* 后端未实现，吞掉 */ }
-    toast({feed:'喂食 +5 活力', pet:'抚摸 +3 心情', play:'玩耍 +5 经验', sleep:'休息中...'}[action]);
+    const TIPS = {
+      feed:  '🍖 喂食 +5 活力',
+      pet:   '🤲 抚摸 +3 心情',
+      play:  '🎾 玩耍 -2 活力（经验只能靠陪伴聊天哦）',
+      sleep: '💤 休息 +20 活力 +1 心情',
+    };
+    try {
+      await api('POST', '/api/pet/interact', { action });
+      toast(TIPS[action] || '已交互');
+    } catch (e) { toast('操作失败：' + e.message, 'error'); return; }
+    // 不直接操作 DOM —— 复用 refreshPet 这唯一一处渲染入口，避免节点 id 不一致
     refreshPet();
   });
 });
@@ -868,39 +1914,17 @@ document.querySelectorAll('.pet-actions .btn').forEach(b => {
 /* =====================================================================
    3) 记忆管理
    --------------------------------------------------------------------
-   API: GET    /api/memory/{device_id}                       ->  { profile:[...], recent:[{user, assistant, ts}] }
-   API: POST   /api/memory/{device_id}     { fact }          ->  { ok }
-   API: DELETE /api/memory/{device_id}/profile/{idx}         ->  { ok }
+   API: GET    /api/memory                       ->  { profile:[...], recent:[{user, assistant, ts}] }
+   API: POST   /api/memory     { fact }          ->  { ok }
+   API: DELETE /api/memory/profile/{idx}         ->  { ok }
+   API: POST   /api/memory/clear-short-term      ->  { ok }
+
+   三端（web/wifi/usb）共享同一份记忆，按 user_id 隔离。前端不需要选设备。
    ===================================================================== */
-let _currentMemDevice = '';
-async function refreshMemoryDeviceList() {
-  try {
-    const data = await api('GET', '/api/state');
-    const ids = Object.keys(data.devices || {});
-    const sel = $('memoryDeviceSel');
-    sel.innerHTML = ids.length
-      ? ids.map(id => `<option value="${escapeHtml(id)}">${escapeHtml(id)}</option>`).join('')
-      : '<option value="">（暂无设备）</option>';
-    if (!_currentMemDevice && ids.length) _currentMemDevice = ids[0];
-    sel.value = _currentMemDevice;
-  } catch {}
-}
-$('memoryDeviceSel').addEventListener('change', (e) => {
-  _currentMemDevice = e.target.value;
-  refreshMemory();
-});
 async function refreshMemory() {
-  if (!_currentMemDevice) {
-    $('profileList').innerHTML = '<div class="empty">请先选择设备</div>';
-    $('recentList').innerHTML = '<div class="empty">--</div>';
-    return;
-  }
   let mem = { profile:[], recent:[] };
-  try { mem = await api('GET', `/api/memory/${encodeURIComponent(_currentMemDevice)}`); }
-  catch {
-    // 后端未实现：只能从 /api/state 拿到记忆条数，详情留空
-    mem = { profile:[], recent:[], _placeholder: true };
-  }
+  try { mem = await api('GET', '/api/memory'); } catch {}
+
   const profile = mem.profile || [];
   $('profileList').innerHTML = profile.length
     ? profile.map((f, i) => `
@@ -908,16 +1932,16 @@ async function refreshMemory() {
           <div class="text">${escapeHtml(f)}</div>
           <button class="btn danger" data-del="${i}">删除</button>
         </div>`).join('')
-    : `<div class="empty">${mem._placeholder ? '后端 /api/memory 接口未实现，先用模拟数据' : '还没记住任何事'}</div>`;
+    : '<div class="empty">还没记住任何事</div>';
   $('profileList').querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const idx = btn.dataset.del;
-      try { await api('DELETE', `/api/memory/${encodeURIComponent(_currentMemDevice)}/profile/${idx}`); }
-      catch {}
+      try { await api('DELETE', `/api/memory/profile/${idx}`); } catch {}
       toast('已删除');
       refreshMemory();
     });
   });
+
   const recent = mem.recent || [];
   $('recentList').innerHTML = recent.length
     ? recent.map(r => `
@@ -931,11 +1955,452 @@ async function refreshMemory() {
 $('addMemoryBtn').addEventListener('click', async () => {
   const fact = $('newMemory').value.trim();
   if (!fact) return;
-  if (!_currentMemDevice) { toast('请先选择设备', 'error'); return; }
-  try { await api('POST', `/api/memory/${encodeURIComponent(_currentMemDevice)}`, { fact }); }
-  catch {}
+  try { await api('POST', '/api/memory', { fact }); }
+  catch (e) { toast('添加失败：' + e.message, 'error'); return; }
   $('newMemory').value = '';
   toast('已添加');
+  refreshMemory();
+});
+$('clearRecentBtn').addEventListener('click', async () => {
+  const ok = await confirmDialog({
+    title: '清空最近对话？',
+    body: '只清空 24h 内的对话流水，长期画像和已归档的总结不会被删除。',
+    okText: '清空',
+    danger: true,
+  });
+  if (!ok) return;
+  try { await api('POST', '/api/memory/clear-short-term'); } catch {}
+  toast('已清空');
+  refreshMemory();
+});
+
+/* ---------- 会话流水 ---------- */
+let _sessionsBeforeId = null;
+let _sessionsHasMore = false;
+let _sessionsAccum = [];
+let _sessionTurnsCache = new Map(); // session_id → turns[]
+
+function _formatTimeRange(s) {
+  const start = s.started_at ? new Date(s.started_at*1000).toLocaleString() : '--';
+  if (!s.closed_at) return `${start} · 进行中`;
+  const end = new Date(s.closed_at*1000).toLocaleString();
+  return `${start} → ${end}`;
+}
+
+function _renderTurnInside(t) {
+  const isSys = t.channel === 'system_event';
+  const time = t.created_at ? new Date(t.created_at*1000).toLocaleTimeString() : '';
+  const tot = (t.user_tokens || 0) + (t.assistant_tokens || 0);
+  const lat = t.latency_ms ? `${(t.latency_ms/1000).toFixed(1)}s` : '';
+  const stats = (!isSys && (tot || lat)) ? `
+    ${tot ? `<span class="stat tok" title="Token：输入 ${t.user_tokens||0} / 输出 ${t.assistant_tokens||0}">⚡${tot}</span>` : ''}
+    ${lat ? `<span class="stat lat" title="模型响应耗时">⏱ ${lat}</span>` : ''}
+  ` : '';
+  const pick = `<label class="pick" onclick="event.stopPropagation()"><input type="checkbox" data-pick-turn="${t.id}"></label>`;
+  if (isSys) {
+    return `
+      <div class="turn-row is-system" data-id="${t.id}">
+        <div class="turn-meta">
+          ${pick}
+          <span>📌 系统事件</span><span class="grow"></span>
+          <span>${escapeHtml(time)}</span>
+          <button class="btn danger btn-del" data-del-turn="${t.id}">删除</button>
+        </div>
+        <div class="turn-line">${escapeHtml(t.assistant_text || '')}</div>
+      </div>`;
+  }
+  return `
+    <div class="turn-row" data-id="${t.id}">
+      <div class="turn-meta">
+        ${pick}
+        <span>#${t.id}</span>
+        <span>来源：${escapeHtml(t.channel || '-')}</span>
+        ${stats}
+        <span class="grow"></span>
+        <span>${escapeHtml(time)}</span>
+        <button class="btn danger btn-del" data-del-turn="${t.id}">删除</button>
+      </div>
+      ${t.user_text ? `<div class="turn-line turn-u"><span class="role">用户</span>${escapeHtml(t.user_text)}</div>` : ''}
+      ${t.assistant_text ? `<div class="turn-line turn-a"><span class="role">桌宠</span>${escapeHtml(t.assistant_text)}</div>` : ''}
+    </div>`;
+}
+
+async function _loadSessionTurns(sid, force=false) {
+  if (!force && _sessionTurnsCache.has(sid)) return _sessionTurnsCache.get(sid);
+  try {
+    const r = await api('GET', `/api/sessions/${sid}/turns?include_system=true`);
+    const turns = r.items || [];
+    _sessionTurnsCache.set(sid, turns);
+    return turns;
+  } catch (e) {
+    toast('加载会话失败：' + e.message, 'error');
+    return [];
+  }
+}
+
+function _renderSessionCard(s) {
+  const active = !s.closed_at;
+  const title = s.title || (active ? '当前会话' : '未命名会话');
+  const turnCount = s.live_turn_count != null ? s.live_turn_count : (s.turn_count || 0);
+  const meta = `${turnCount} 轮 · ${_formatTimeRange(s)}`;
+  const pick = active
+    ? '<span class="pick"></span>'
+    : `<label class="pick" onclick="event.stopPropagation()"><input type="checkbox" data-pick-session="${s.id}"></label>`;
+  // 不再展开式 —— 直接展示概要 + 操作按钮，点"查看"打开独立悬浮窗
+  return `
+    <div class="session-card ${active ? 'active' : ''}" data-sid="${s.id}">
+      <div class="session-head" data-open-viewer="${s.id}">
+        ${pick}
+        <div class="title">${escapeHtml(title)} <span class="small">#${s.id}</span></div>
+        <div class="meta">${escapeHtml(meta)}</div>
+        ${active ? '<span class="badge ok">进行中</span>' : '<span class="badge muted">已归档</span>'}
+      </div>
+      ${s.summary ? `<div class="session-summary">📝 ${escapeHtml(s.summary)}</div>` : ''}
+      <div class="session-actions">
+        <button class="btn" data-open-viewer="${s.id}">👁 查看会话</button>
+        ${active
+          ? '<span class="small" style="color:var(--muted);">活跃会话只能在“对话”页点🗑️结束</span>'
+          : `<button class="btn primary" data-resume-session="${s.id}">▶ 接着聊</button>
+             <button class="btn danger" data-del-session="${s.id}">删除整个会话</button>`}
+      </div>
+    </div>`;
+}
+
+function _bindSessionCardEvents() {
+  // 卡片头/查看按钮 → 打开独立悬浮窗
+  $('sessionList').querySelectorAll('[data-open-viewer]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      // 多选模式下点头部不打开 viewer，让 checkbox 正常工作
+      const multi = $('sessionList').classList.contains('sessions-multi-on');
+      // 但即使多选模式，"查看会话"按钮还是要能用
+      const isExplicitViewBtn = el.tagName === 'BUTTON';
+      if (multi && !isExplicitViewBtn) return;
+      e.stopPropagation();
+      const sid = parseInt(el.dataset.openViewer, 10);
+      openSessionViewer(sid);
+    });
+  });
+
+  // ---- 接着聊（续接历史会话）----
+  $('sessionList').querySelectorAll('[data-resume-session]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const sid = btn.dataset.resumeSession;
+      const ok = await confirmDialog({
+        title: '接着这段会话聊？',
+        body: '当前正在进行的会话会先被自动总结归档（不会丢记忆），然后桌宠会带着这段历史的回忆继续陪你聊。',
+        okText: '继续这段',
+        danger: false,
+      });
+      if (!ok) return;
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = '处理中…';
+      try {
+        await api('POST', `/api/sessions/${sid}/resume`);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = oldText;
+        toast('续接失败：' + err.message, 'error');
+        return;
+      }
+      toast('已接上这段会话，去对话页继续聊吧');
+      _sessionsBeforeId = null;
+      _sessionTurnsCache.clear();
+      refreshSessions({ append: false });
+      location.hash = '#chat';
+      $('chatLog').innerHTML = '<div class="msg" id="chatGreeting"><div class="who">🐱</div><div class="bubble">…</div></div>';
+      if (typeof loadGreeting === 'function') loadGreeting();
+      refreshMemory();
+    });
+  });
+
+  $('sessionList').querySelectorAll('[data-del-session]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const sid = btn.dataset.delSession;
+      const ok = await confirmDialog({
+        title: '删除整个会话？',
+        body: '会话内的全部消息都会一起删除，此操作不可恢复。',
+        okText: '删除',
+        danger: true,
+      });
+      if (!ok) return;
+      try { await api('DELETE', `/api/sessions/${sid}`); }
+      catch (err) { toast('删除失败：' + err.message, 'error'); return; }
+      _sessionsAccum = _sessionsAccum.filter(s => String(s.id) !== String(sid));
+      _sessionTurnsCache.delete(parseInt(sid, 10));
+      _renderSessionList();
+      toast('已删除会话');
+      refreshMemory();
+    });
+  });
+}
+
+/* =====================================================================
+   会话独立悬浮窗（点开看全貌、多选删除消息、接着聊）
+   --------------------------------------------------------------------
+   这套 viewer 替代了原来的"行内展开" —— 因为行内展开会挤占其他卡片
+   且空间有限。Modal 撑满 70vh，独立滚动，按钮永远可见。
+   ===================================================================== */
+let _viewerSid = null;
+let _viewerTurns = [];
+let _viewerMultiOn = false;
+
+async function openSessionViewer(sid) {
+  _viewerSid = sid;
+  _viewerMultiOn = false;
+  $('sessionViewerMask').classList.add('show');
+  $('sessionViewerBody').innerHTML = '<div class="empty">加载中…</div>';
+  $('sessionViewerActions').innerHTML = '';
+  $('sessionViewerTitle').textContent = `会话 #${sid}`;
+
+  const card = _sessionsAccum.find(s => Number(s.id) === Number(sid));
+  const isActive = card && !card.closed_at;
+  const title = (card && card.title) || (isActive ? '当前会话' : '未命名会话');
+  const meta  = card ? `${card.live_turn_count != null ? card.live_turn_count : (card.turn_count || 0)} 轮 · ${_formatTimeRange(card)}` : '';
+  $('sessionViewerTitle').textContent = `${title} #${sid}`;
+  $('sessionViewerMeta').textContent = meta;
+  $('sessionViewerSummary').innerHTML = (card && card.summary)
+    ? `<div class="session-summary">📝 ${escapeHtml(card.summary)}</div>` : '';
+
+  // 加载消息
+  const turns = await _loadSessionTurns(sid, true);
+  _viewerTurns = turns;
+  _renderViewerBody();
+
+  // 操作栏
+  const actBar = $('sessionViewerActions');
+  if (isActive) {
+    actBar.innerHTML = '<span class="small" style="color:var(--muted);">这是当前进行中的会话，结束 / 删除 请去“对话”页操作</span>';
+  } else {
+    actBar.innerHTML = `
+      <button class="btn primary" id="viewerResumeBtn">▶ 接着聊</button>
+      <button class="btn" id="viewerMultiBtn">☑ 多选消息</button>
+      <button class="btn danger" id="viewerBatchDelBtn" style="display:none;">删除选中</button>
+      <span class="grow"></span>
+      <button class="btn danger" id="viewerDelSessionBtn">🗑 删除整个会话</button>
+    `;
+    $('viewerResumeBtn').addEventListener('click', () => _viewerResume());
+    $('viewerMultiBtn').addEventListener('click', () => _viewerToggleMulti());
+    $('viewerBatchDelBtn').addEventListener('click', () => _viewerBatchDelete());
+    $('viewerDelSessionBtn').addEventListener('click', () => _viewerDeleteSession());
+  }
+}
+
+function _renderViewerBody() {
+  const body = $('sessionViewerBody');
+  if (!_viewerTurns.length) {
+    body.innerHTML = '<div class="empty" style="padding:32px;">这个会话还是空的</div>';
+    return;
+  }
+  body.classList.toggle('turns-multi-on', _viewerMultiOn);
+  body.innerHTML = _viewerTurns.map(_renderTurnInside).join('');
+  // 绑定单条删除
+  body.querySelectorAll('[data-del-turn]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const tid = btn.dataset.delTurn;
+      const ok = await confirmDialog({
+        title: '删除这条消息？',
+        body: '此操作不可恢复。已经被总结进短期/长期记忆的内容不会被删除。',
+        okText: '删除',
+        danger: true,
+      });
+      if (!ok) return;
+      try { await api('DELETE', `/api/sessions/${_viewerSid}/turns/${tid}`); }
+      catch (err) { toast('删除失败：' + err.message, 'error'); return; }
+      _sessionTurnsCache.delete(_viewerSid);
+      _viewerTurns = await _loadSessionTurns(_viewerSid, true);
+      _renderViewerBody();
+      toast('已删除');
+      refreshMemory();
+    });
+  });
+}
+
+function _viewerToggleMulti() {
+  _viewerMultiOn = !_viewerMultiOn;
+  $('viewerMultiBtn').textContent = _viewerMultiOn ? '✕ 退出多选' : '☑ 多选消息';
+  $('viewerBatchDelBtn').style.display = _viewerMultiOn ? '' : 'none';
+  _renderViewerBody();
+}
+
+async function _viewerBatchDelete() {
+  const tids = Array.from($('sessionViewerBody').querySelectorAll('input[data-pick-turn]:checked'))
+    .map(i => parseInt(i.dataset.pickTurn, 10)).filter(Boolean);
+  if (!tids.length) { toast('没有选中任何消息', 'error'); return; }
+  const ok = await confirmDialog({
+    title: `批量删除 ${tids.length} 条消息？`,
+    body: '此操作不可恢复。已经被总结进短期/长期记忆的内容不会被删除。',
+    okText: `删除 ${tids.length} 条`,
+    danger: true,
+  });
+  if (!ok) return;
+  let okCount = 0;
+  for (const tid of tids) {
+    try { await api('DELETE', `/api/sessions/${_viewerSid}/turns/${tid}`); okCount++; }
+    catch {}
+  }
+  toast(`已删除 ${okCount}/${tids.length} 条`);
+  _sessionTurnsCache.delete(_viewerSid);
+  _viewerTurns = await _loadSessionTurns(_viewerSid, true);
+  _viewerMultiOn = false;
+  $('viewerMultiBtn').textContent = '☑ 多选消息';
+  $('viewerBatchDelBtn').style.display = 'none';
+  _renderViewerBody();
+  refreshMemory();
+}
+
+async function _viewerResume() {
+  const ok = await confirmDialog({
+    title: '接着这段会话聊？',
+    body: '当前正在进行的会话会先被自动总结归档（不会丢记忆），然后桌宠会带着这段历史的回忆继续陪你聊。',
+    okText: '继续这段',
+    danger: false,
+  });
+  if (!ok) return;
+  try { await api('POST', `/api/sessions/${_viewerSid}/resume`); }
+  catch (err) { toast('续接失败：' + err.message, 'error'); return; }
+  closeSessionViewer();
+  toast('已接上这段会话，去对话页继续聊吧');
+  _sessionsBeforeId = null;
+  _sessionTurnsCache.clear();
+  refreshSessions({ append: false });
+  location.hash = '#chat';
+  $('chatLog').innerHTML = '<div class="msg" id="chatGreeting"><div class="who">🐱</div><div class="bubble">…</div></div>';
+  if (typeof loadGreeting === 'function') loadGreeting();
+  refreshMemory();
+}
+
+async function _viewerDeleteSession() {
+  const ok = await confirmDialog({
+    title: '删除整个会话？',
+    body: '会话内的全部消息都会一起删除，此操作不可恢复。',
+    okText: '删除',
+    danger: true,
+  });
+  if (!ok) return;
+  try { await api('DELETE', `/api/sessions/${_viewerSid}`); }
+  catch (err) { toast('删除失败：' + err.message, 'error'); return; }
+  _sessionsAccum = _sessionsAccum.filter(s => Number(s.id) !== Number(_viewerSid));
+  _sessionTurnsCache.delete(_viewerSid);
+  _renderSessionList();
+  closeSessionViewer();
+  toast('已删除会话');
+  refreshMemory();
+}
+
+function closeSessionViewer() {
+  $('sessionViewerMask').classList.remove('show');
+  _viewerSid = null;
+  _viewerTurns = [];
+  _viewerMultiOn = false;
+}
+
+// 关闭事件：✕ / 点遮罩 / Esc
+$('sessionViewerClose').addEventListener('click', closeSessionViewer);
+$('sessionViewerMask').addEventListener('click', (e) => {
+  if (e.target === $('sessionViewerMask')) closeSessionViewer();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('sessionViewerMask').classList.contains('show')) {
+    closeSessionViewer();
+  }
+});
+
+function _bindTurnDeleteInside(sid, container) {
+  container.querySelectorAll('[data-del-turn]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const tid = btn.dataset.delTurn;
+      const ok = await confirmDialog({
+        title: '删除这条消息？',
+        body: '此操作不可恢复。',
+        okText: '删除',
+        danger: true,
+      });
+      if (!ok) return;
+      try { await api('DELETE', `/api/sessions/${sid}/turns/${tid}`); }
+      catch (err) { toast('删除失败：' + err.message, 'error'); return; }
+      _sessionTurnsCache.delete(sid);
+      const fresh = await _loadSessionTurns(sid, true);
+      container.innerHTML = fresh.length
+        ? fresh.map(_renderTurnInside).join('')
+        : '<div class="empty" style="padding:12px;">这个会话已经空了</div>';
+      _bindTurnDeleteInside(sid, container);
+      toast('已删除');
+      refreshMemory();
+    });
+  });
+}
+
+function _renderSessionList() {
+  const list = $('sessionList');
+  if (!_sessionsAccum.length) {
+    list.innerHTML = '<div class="empty">还没有会话</div>';
+    $('sessionsLoadMoreBtn').style.display = 'none';
+    return;
+  }
+  list.innerHTML = _sessionsAccum.map(_renderSessionCard).join('');
+  $('sessionsLoadMoreBtn').style.display = _sessionsHasMore ? '' : 'none';
+  // 顶部"当前会话"标签
+  const active = _sessionsAccum.find(s => !s.closed_at);
+  $('sessionsActiveLabel').textContent = active
+    ? `当前会话 #${active.id}（${active.live_turn_count || 0} 轮）`
+    : '没有进行中的会话';
+  _bindSessionCardEvents();
+}
+
+async function refreshSessions({ append = false } = {}) {
+  const limit = 30;
+  const url = `/api/sessions?limit=${limit}`
+    + (append && _sessionsBeforeId ? `&before_id=${_sessionsBeforeId}` : '');
+  let data;
+  try { data = await api('GET', url); }
+  catch (e) { toast('加载会话失败：' + e.message, 'error'); return; }
+  const items = data.items || [];
+  _sessionsAccum = append ? [..._sessionsAccum, ...items] : items;
+  _sessionsBeforeId = data.next_before_id;
+  _sessionsHasMore = !!data.next_before_id;
+  _renderSessionList();
+}
+
+$('sessionsRefreshBtn').addEventListener('click', () => {
+  _sessionsBeforeId = null;
+  _sessionTurnsCache.clear();
+  refreshSessions({ append: false });
+});
+$('sessionsLoadMoreBtn').addEventListener('click', () => refreshSessions({ append: true }));
+
+/* ---- 多选删除 session ---- */
+$('sessionsMultiBtn').addEventListener('click', () => {
+  const list = $('sessionList');
+  const on = list.classList.toggle('sessions-multi-on');
+  $('sessionsBatchDelBtn').style.display = on ? '' : 'none';
+  $('sessionsMultiBtn').textContent = on ? '✕ 退出多选' : '☑ 多选';
+  if (!on) list.querySelectorAll('input[data-pick-session]').forEach(i => { i.checked = false; });
+});
+$('sessionsBatchDelBtn').addEventListener('click', async () => {
+  const ids = Array.from($('sessionList').querySelectorAll('input[data-pick-session]:checked'))
+    .map(i => parseInt(i.dataset.pickSession, 10)).filter(Boolean);
+  if (!ids.length) { toast('没有选中任何会话', 'error'); return; }
+  const ok = await confirmDialog({
+    title: `批量删除 ${ids.length} 个会话？`,
+    body: '会话内的所有消息都会一起被删除，此操作不可恢复。',
+    okText: `删除 ${ids.length} 个`,
+    danger: true,
+  });
+  if (!ok) return;
+  let okCount = 0;
+  for (const id of ids) {
+    try { await api('DELETE', `/api/sessions/${id}`); okCount++; }
+    catch {}
+  }
+  toast(`已删除 ${okCount}/${ids.length} 个会话`);
+  $('sessionsMultiBtn').click(); // 退出多选
+  _sessionsBeforeId = null;
+  refreshSessions({ append: false });
   refreshMemory();
 });
 
@@ -966,6 +2431,7 @@ async function refreshDevice() {
     $('asrMeta').textContent = d.last_asr_bytes ? `ASR ${d.last_asr_ms ?? '--'} ms，录音 ${d.last_asr_duration_ms ?? '--'} ms，RMS ${d.last_asr_rms ?? '--'}，空白 ${d.last_asr_blank_count || 0}${d.last_asr_retry_without_vad ? '，强语音兜底' : ''}` : '--';
     $('lastTts').textContent = d.last_tts_text || '--';
     $('ttsMeta').textContent = d.tts_engine ? `TTS ${d.tts_engine}，${d.last_tts_ms ?? '--'} ms，LLM ${d.last_chat_ms ?? '--'} ms` : '--';
+    syncDeviceChat(d);
     $('memory').textContent = (data.memory && data.memory.profile_count) || 0;
     $('visionEngine').textContent = v.engine || (data.gateway && data.gateway.vision_engine) || '--';
     $('visionMeta').textContent = v.orientation != null ? `方向 ${v.orientation}°，视觉 ${v.vision_ms ?? d.last_vision_ms ?? '--'} ms` : `视觉 ${v.vision_ms ?? d.last_vision_ms ?? '--'} ms`;
@@ -1009,10 +2475,14 @@ async function refreshDevice() {
 /* =====================================================================
    5) 文字对话
    --------------------------------------------------------------------
-   API: POST /chat   { text, vision, device_id, history }   ->  { reply }    （已实现）
+   API: POST /chat   { text, device_id }                    ->  { reply }    （已实现，agent 内部维护 history）
    API: POST /tts    { text, voice, ... }                   ->  { audio_url }（已实现）
+
+   注意：history / profile 由后端 agent 从 memory 中加载，前端不再传递。
+   如需显示历史，单独走 GET /api/memory/{device_id}。
    ===================================================================== */
-let chatHistory = [];
+let lastDeviceAsrKey = '';
+let lastDeviceTtsKey = '';
 function appendMsg(role, text) {
   const el = document.createElement('div');
   el.className = 'msg ' + (role === 'user' ? 'user' : '');
@@ -1020,22 +2490,34 @@ function appendMsg(role, text) {
   $('chatLog').appendChild(el);
   $('chatLog').scrollTop = $('chatLog').scrollHeight;
 }
+function syncDeviceChat(d) {
+  if (!d || location.hash.slice(1) !== 'chat') return;
+  if (d.last_asr_text) {
+    const key = `${d.device_id || ''}:${d.last_asr_valid_at || ''}:${d.last_asr_text}`;
+    if (key !== lastDeviceAsrKey) {
+      lastDeviceAsrKey = key;
+      appendMsg('user', d.last_asr_text);
+    }
+  }
+  if (d.last_tts_text) {
+    const key = `${d.device_id || ''}:${d.last_tts_audio || ''}:${d.last_tts_text}`;
+    if (key !== lastDeviceTtsKey) {
+      lastDeviceTtsKey = key;
+      appendMsg('assistant', d.last_tts_text);
+    }
+  }
+}
 async function sendChat() {
   const text = $('chatInput').value.trim();
   if (!text) return;
   $('chatInput').value = '';
   appendMsg('user', text);
-  chatHistory.push({ role:'user', content:text });
-  const profile = loadProfileLocal();
   try {
     const data = await api('POST', '/chat', {
       text,
-      vision: '',
-      device_id: profile.name ? `web-${profile.name}` : 'web-dashboard',
-      history: chatHistory.slice(-12),
+      device_id: currentChatDeviceId(),
     });
     const reply = data.reply || '...';
-    chatHistory.push({ role:'assistant', content:reply });
     appendMsg('assistant', reply);
     if ($('chatTtsToggle').checked) {
       try {
@@ -1044,17 +2526,59 @@ async function sendChat() {
       } catch {}
     }
   } catch (err) {
-    appendMsg('assistant', '⚠️ 网关返回错误：' + err.message);
+    const msg = err.message || '';
+    if (/500/.test(msg) || /API Key/i.test(msg)) {
+      appendMsg('assistant', '⚠️ 还没配置 LLM 账号，没法回话呢～点这里去「账户情况」配置 →');
+      const last = $('chatLog').lastElementChild;
+      if (last) {
+        last.style.cursor = 'pointer';
+        last.addEventListener('click', () => { location.hash = '#account'; });
+      }
+    } else {
+      appendMsg('assistant', '⚠️ 网关返回错误：' + msg);
+    }
   }
 }
 $('chatSendBtn').addEventListener('click', sendChat);
 $('chatInput').addEventListener('keydown', (e) => {
+  // IME（中/日/韩输入法）联想阶段的回车不能拦截：
+  //   - e.isComposing: 标准属性，组合输入中为 true
+  //   - e.keyCode === 229: 旧浏览器 / 部分 IME 的兜底信号
+  // 否则用户在打中文按回车确认候选词时会被当成"提交"，候选词丢失只剩英文。
+  if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
-$('chatClearBtn').addEventListener('click', () => {
-  chatHistory = [];
-  $('chatLog').innerHTML = '<div class="msg"><div class="who">🐱</div><div class="bubble">已清空，重新开始吧～</div></div>';
+$('chatClearBtn').addEventListener('click', async () => {
+  const ok = await confirmDialog({
+    title: '结束当前对话？',
+    body: '会触发一次会话级总结（同时影响 USB / WiFi 端的当前会话）。\n桌宠会带着这次的回忆开始新的一段对话。',
+    okText: '结束并归档',
+    danger: false,
+  });
+  if (!ok) return;
+  try {
+    await api('POST', '/api/sessions/close');
+  } catch (e) {
+    toast('结束失败：' + e.message, 'error');
+    return;
+  }
+  // 清屏 + 重拉开场白
+  $('chatLog').innerHTML = '<div class="msg" id="chatGreeting"><div class="who">🐱</div><div class="bubble">…</div></div>';
+  await loadGreeting();
+  toast('上一段对话已归档');
+  refreshMemory();
 });
+
+async function loadGreeting() {
+  const bubble = document.querySelector('#chatGreeting .bubble');
+  if (!bubble) return;
+  try {
+    const r = await api('GET', '/api/chat/greeting');
+    bubble.textContent = r.text || '嗨～今天想聊点啥？';
+  } catch (e) {
+    bubble.textContent = '嗨～今天想聊点啥？';
+  }
+}
 
 /* =====================================================================
    6) 技能学习
@@ -1149,19 +2673,768 @@ $('addMcpBtn').addEventListener('click', async () => {
 });
 
 /* =====================================================================
+   人格切换（数据驱动 —— 选项来自 /api/personas，新增人格不需要改前端）
+   --------------------------------------------------------------------
+   交互模型：
+     - 顶部滑动开关 = 随机模式
+       开启：mode=random，每次发消息都会临时抽一个人格回复
+             → 隐藏下方人格网格（卡片不显示）
+       关闭：保留之前手动选的人格 id；如果之前是 random，回退到 default
+             → 显示人格网格供挑选
+   API: GET  /api/personas         -> { items, mode, effective }
+   API: PUT  /api/personas/active  { mode }
+   ===================================================================== */
+async function refreshPersonas() {
+  const grid = $('personaGrid');
+  const toggle = $('personaRandomToggle');
+  const banner = $('personaRandomBanner');
+  if (!grid) return;
+  let data;
+  try { data = await api('GET', '/api/personas'); }
+  catch { grid.innerHTML = '<div class="empty">人格列表加载失败</div>'; return; }
+
+  const mode = data.mode || 'default';
+  const eff = data.effective || {};
+  const isRandom = (mode === 'random');
+
+  // 顶部状态文案
+  $('personaActiveLabel').textContent = isRandom
+    ? '当前：🎲 随机模式 · 每次回复都换人格'
+    : `当前：${eff.emoji || ''} ${eff.label || '默认'}`;
+
+  // 同步开关状态
+  if (toggle) toggle.checked = isRandom;
+  if (banner) banner.style.display = isRandom ? '' : 'none';
+  grid.style.display = isRandom ? 'none' : '';
+
+  // 渲染人格卡片：去掉 random 伪选项，只保留真实人格
+  const realItems = (data.items || []).filter(p => p.id !== 'random');
+  grid.innerHTML = realItems.map(p => {
+    const isActive = !isRandom && p.id === mode;
+    const cls = ['persona-card'];
+    if (isActive) cls.push('active');
+    return `
+      <div class="${cls.join(' ')}" data-pid="${escapeHtml(p.id)}">
+        <div class="head">
+          <span class="emoji">${escapeHtml(p.emoji || '🐱')}</span>
+          <span class="label">${escapeHtml(p.label || p.id)}</span>
+        </div>
+        <div class="desc">${escapeHtml(p.description || '')}</div>
+      </div>`;
+  }).join('');
+  grid.querySelectorAll('[data-pid]').forEach(el => {
+    el.addEventListener('click', async () => {
+      const pid = el.dataset.pid;
+      try { await api('PUT', '/api/personas/active', { mode: pid }); }
+      catch (e) { toast('切换失败：' + e.message, 'error'); return; }
+      toast('已切换人格');
+      refreshPersonas();
+    });
+  });
+}
+$('personaRandomToggle').addEventListener('change', async (e) => {
+  const on = e.target.checked;
+  // 关闭时回退到 default（不知道用户之前固定选了哪个，统一回到默认人格最稳妥）
+  const nextMode = on ? 'random' : 'default';
+  try { await api('PUT', '/api/personas/active', { mode: nextMode }); }
+  catch (err) {
+    toast('切换失败：' + err.message, 'error');
+    e.target.checked = !on;
+    return;
+  }
+  toast(on ? '已开启 🎲 随机模式' : '已关闭随机模式');
+  refreshPersonas();
+});
+
+/* =====================================================================
+   启动
+   ===================================================================== */
+/* =====================================================================
+   3.5) 日记日历 + AI 画像
+   --------------------------------------------------------------------
+   API: GET  /api/memory/calendar?start=YYYY-MM-DD&end=YYYY-MM-DD
+   API: GET  /api/memory/day/{day}
+   API: POST /api/memory/day/{day}/summarize
+   API: GET  /api/ai-profile
+   API: POST /api/ai-profile/refresh
+   ===================================================================== */
+let _calCursor = new Date();    // 当前展示的月（1 号）
+let _calSummaries = new Map();  // day -> {turn_count, preview, ...}
+let _selectedDay = null;
+
+function _ymd(d) {
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), x = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${x}`;
+}
+
+async function refreshCalendar() {
+  const cursor = new Date(_calCursor.getFullYear(), _calCursor.getMonth(), 1);
+  const monthEnd = new Date(_calCursor.getFullYear(), _calCursor.getMonth() + 1, 0);
+  $('calLabel').textContent = `${cursor.getFullYear()} 年 ${cursor.getMonth()+1} 月`;
+
+  try {
+    const r = await api('GET', `/api/memory/calendar?start=${_ymd(cursor)}&end=${_ymd(monthEnd)}`);
+    _calSummaries = new Map((r.items || []).map(it => [it.day, it]));
+  } catch { _calSummaries = new Map(); }
+
+  // 渲染网格
+  const grid = $('calGrid');
+  const headers = ['日','一','二','三','四','五','六'];
+  let html = headers.map(h => `<div class="cell-h">${h}</div>`).join('');
+  const firstDow = cursor.getDay();
+  for (let i = 0; i < firstDow; i++) html += '<div class="cell empty-cell"></div>';
+  const today = _ymd(new Date());
+  for (let day = 1; day <= monthEnd.getDate(); day++) {
+    const ymd = _ymd(new Date(cursor.getFullYear(), cursor.getMonth(), day));
+    const has = _calSummaries.has(ymd);
+    const cls = ['cell'];
+    if (has) cls.push('has-summary');
+    if (ymd === today) cls.push('is-today');
+    if (ymd === _selectedDay) cls.push('selected');
+    html += `<div class="${cls.join(' ')}" data-day="${ymd}">${day}</div>`;
+  }
+  grid.innerHTML = html;
+  grid.querySelectorAll('[data-day]').forEach(el => {
+    el.addEventListener('click', () => selectDay(el.dataset.day));
+  });
+
+  refreshAiProfile();
+}
+
+async function selectDay(ymd) {
+  _selectedDay = ymd;
+  $$('#calGrid .cell').forEach(c => c.classList.toggle('selected', c.dataset.day === ymd));
+  $('dayTitle').textContent = ymd;
+  $('reSummarizeBtn').style.display = '';
+  $('dayBody').innerHTML = '<div class="empty">加载中…</div>';
+  try {
+    const data = await api('GET', `/api/memory/day/${ymd}`);
+    renderDay(data);
+  } catch (err) {
+    if (String(err.message).includes('404')) {
+      // 用日历数据判断这天是否聊过（基于 mood 角标）
+      const u = _calDailyTokens && _calDailyTokens.get(ymd);
+      const hasChat = u && u.tokens > 0;
+      $('dayBody').innerHTML = `
+        <div class="empty" style="line-height:1.8;">
+          ${hasChat
+            ? '这一天聊过，但还没生成日记<br><br><button class="btn primary" id="genDayBtn">生成总结</button>'
+            : '<div style="font-size:32px; margin-bottom:8px;">🐱💤</div>这一天没有聊天记录<br><span class="small">点上方“重新生成”可以再确认一下</span>'}
+        </div>`;
+      const gen = $('genDayBtn');
+      if (gen) gen.addEventListener('click', () => regenerateDay(ymd));
+    } else {
+      $('dayBody').innerHTML = `<div class="empty">加载失败：${escapeHtml(err.message)}</div>`;
+    }
+  }
+}
+
+function renderDay(d) {
+  const bullets = (d.bullet_facts || []).map(b => `<li>${escapeHtml(b)}</li>`).join('');
+  // 心情徽章 —— 只在日记里展示，不再展示 token
+  const moodBadge = (d.mood && CAL_MOOD_EMOJI[d.mood])
+    ? `<span class="mood-badge" title="${escapeHtml(d.mood)}">
+         <span class="emoji">${CAL_MOOD_EMOJI[d.mood]}</span>
+         <span>${escapeHtml(CAL_MOOD_LABEL[d.mood] || d.mood)}</span>
+       </span>`
+    : '';
+  $('dayBody').innerHTML = `
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+      ${moodBadge}
+      <span class="small">${d.turn_count || 0} 轮对话</span>
+    </div>
+    <div style="white-space:pre-wrap; line-height:1.7;">${escapeHtml(d.summary || '')}</div>
+    ${bullets ? `<ul style="margin-top:10px;">${bullets}</ul>` : ''}
+  `;
+}
+
+async function regenerateDay(ymd) {
+  $('dayBody').innerHTML = '<div class="empty">总结中…（可能需要 30 秒）</div>';
+  try {
+    const data = await api('POST', `/api/memory/day/${ymd}/summarize`);
+    renderDay(data);
+    refreshCalendar();
+    toast('已生成日记');
+  } catch (e) { toast('生成失败：' + e.message, 'error'); }
+}
+
+$('calPrev').addEventListener('click', () => {
+  _calCursor = new Date(_calCursor.getFullYear(), _calCursor.getMonth() - 1, 1);
+  refreshCalendar();
+});
+$('calNext').addEventListener('click', () => {
+  _calCursor = new Date(_calCursor.getFullYear(), _calCursor.getMonth() + 1, 1);
+  refreshCalendar();
+});
+$('calToday').addEventListener('click', () => {
+  _calCursor = new Date();
+  refreshCalendar();
+});
+$('reSummarizeBtn').addEventListener('click', () => {
+  if (_selectedDay) regenerateDay(_selectedDay);
+});
+
+async function refreshAiProfile() {
+  try {
+    const p = await api('GET', '/api/ai-profile');
+    if (!p.description && (!p.traits || !p.traits.length)) {
+      $('aiProfileBody').innerHTML = '<div class="empty">还没有生成，点上方按钮试试</div>';
+      $('aiProfileMeta').textContent = '--';
+      return;
+    }
+    const traits = (p.traits || []).map(t => `<span class="badge muted" style="margin-right:4px">${escapeHtml(t)}</span>`).join('');
+    const interests = (p.interests || []).map(t => `<span class="badge ok" style="margin-right:4px">${escapeHtml(t)}</span>`).join('');
+    $('aiProfileBody').innerHTML = `
+      <div style="margin-bottom:10px; line-height:1.7;">${escapeHtml(p.description || '')}</div>
+      <div style="margin-bottom:6px;"><span class="small">性格：</span>${traits || '<span class="small">--</span>'}</div>
+      <div><span class="small">兴趣：</span>${interests || '<span class="small">--</span>'}</div>
+    `;
+    $('aiProfileMeta').textContent = p.updated_at ? '更新于 ' + new Date(p.updated_at*1000).toLocaleString() : '--';
+  } catch {}
+}
+$('refreshAiProfileBtn').addEventListener('click', async () => {
+  $('aiProfileBody').innerHTML = '<div class="empty">总结中…（可能需要 30 秒）</div>';
+  try {
+    await api('POST', '/api/ai-profile/refresh');
+    toast('已重新生成');
+    refreshAiProfile();
+  } catch (e) { toast('生成失败：' + e.message, 'error'); refreshAiProfile(); }
+});
+
+/* =====================================================================
+   7) 账户情况（LLM 账号 + 用量）
+   --------------------------------------------------------------------
+   API: GET    /api/llm/accounts                    -> { items:[...] }
+   API: GET    /api/llm/active                      -> { configured, ... }
+   API: POST   /api/llm/accounts        { ... }     -> { ok, id }
+   API: PUT    /api/llm/accounts/{id}   { ... }     -> { ok }
+   API: POST   /api/llm/accounts/{id}/activate      -> { ok }
+   API: DELETE /api/llm/accounts/{id}               -> { ok }
+   API: GET    /api/usage/today                     -> { tokens, calls, cost, balance, ... }
+   API: GET    /api/usage/daily?days=30             -> { items:[{day,tokens,cost,calls}] }
+   ===================================================================== */
+let _acctAccum = [];
+let _acctEditingId = null;
+const _liveBalance = new Map(); // account_id -> {balance, balance_currency, balance_source}
+const ACCT_PROVIDER_LABEL = {
+  deepseek:'DeepSeek', openai:'OpenAI', moonshot:'Moonshot',
+  qwen:'通义千问', zhipu:'智谱', custom:'自定义',
+};
+const ACCT_PROVIDER_INITIAL = {
+  deepseek:'DS', openai:'AI', moonshot:'🌙', qwen:'通', zhipu:'智', custom:'★',
+};
+
+function _acctCurrency(c) { return ({CNY:'¥', USD:'$', EUR:'€'})[c] || (c || ''); }
+
+function _renderAcctCard(a) {
+  const isActive = !!a.is_active;
+  const label = a.label || ACCT_PROVIDER_LABEL[a.provider] || a.provider || '未命名';
+  const prov  = ACCT_PROVIDER_LABEL[a.provider] || a.provider || '--';
+  const cur   = _acctCurrency(a.balance_currency);
+  const live  = _liveBalance.get(a.id);
+  const hasLive = live && live.balance != null;
+  const balVal = hasLive ? Number(live.balance).toFixed(2)
+                         : (a.balance != null ? Number(a.balance).toFixed(2) : '--');
+  const balCurEff = hasLive ? _acctCurrency(live.balance_currency) : cur;
+  const balTag = hasLive ? '<span class="bal-tag live">实时</span>'
+                         : (a.balance != null ? '<span class="bal-tag local">本地</span>' : '');
+  const initial = ACCT_PROVIDER_INITIAL[a.provider] || '★';
+  return `
+    <div class="acct-card ${isActive?'active':''}" data-aid="${a.id}">
+      <div class="badge-provider">${escapeHtml(initial)}</div>
+      <div class="info">
+        <div class="name">
+          ${escapeHtml(label)}
+          ${isActive ? '<span class="badge ok">生效中</span>' : ''}
+        </div>
+        <div class="meta">
+          <span>${escapeHtml(prov)}</span>
+          <span>·</span>
+          <span>${escapeHtml(a.chat_model || '默认模型')}</span>
+        </div>
+        <div class="key">${escapeHtml(a.api_key_masked || '(未填 API Key)')}</div>
+      </div>
+      <div class="right">
+        <div class="balance">${escapeHtml(balCurEff)} ${escapeHtml(balVal)} ${balTag}</div>
+        <div class="actions">
+          ${isActive ? '' : `<button class="btn primary" data-act-activate="${a.id}">设为生效</button>`}
+          <button class="btn" data-act-refresh="${a.id}" title="向 provider 实时查询余额">🔄 余额</button>
+          <button class="btn" data-act-edit="${a.id}">编辑</button>
+          <button class="btn danger" data-act-delete="${a.id}">删除</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _renderAcctHero() {
+  const active = _acctAccum.find(a => a.is_active);
+  if (!active) {
+    $('acctHeroName').textContent = '未配置';
+    $('acctHeroMeta').textContent = '点下方“+ 新增账号”开始';
+    $('acctHeroBalance').textContent = '--';
+    return;
+  }
+  const label = active.label || ACCT_PROVIDER_LABEL[active.provider] || active.provider;
+  $('acctHeroName').textContent = label;
+  $('acctHeroMeta').textContent = `${ACCT_PROVIDER_LABEL[active.provider] || active.provider} · ${active.chat_model || '默认模型'}`;
+  const live = _liveBalance.get(active.id);
+  const hasLive = live && live.balance != null;
+  const balVal = hasLive ? Number(live.balance).toFixed(2)
+                         : (active.balance != null ? Number(active.balance).toFixed(2) : null);
+  const cur = _acctCurrency(hasLive ? live.balance_currency : active.balance_currency);
+  if (balVal == null) {
+    $('acctHeroBalance').innerHTML = '--';
+  } else {
+    const tag = hasLive ? '<span class="bal-tag live">实时</span>'
+                        : '<span class="bal-tag local">本地</span>';
+    $('acctHeroBalance').innerHTML = `${escapeHtml(cur)} ${escapeHtml(balVal)} ${tag}`;
+  }
+}
+
+function _renderAcctList() {
+  const box = $('acctList');
+  if (!_acctAccum.length) {
+    box.innerHTML = '<div class="empty">还没有配置 LLM 账号，点上方 “+ 新增账号”</div>';
+    return;
+  }
+  box.innerHTML = _acctAccum.map(_renderAcctCard).join('');
+  box.querySelectorAll('[data-act-activate]').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.actActivate;
+    try { await api('POST', `/api/llm/accounts/${id}/activate`); }
+    catch (e) { toast('切换失败：' + e.message, 'error'); return; }
+    toast('已切换生效账号');
+    refreshAccounts();
+    refreshFooterBar();
+  }));
+  box.querySelectorAll('[data-act-edit]').forEach(b => b.addEventListener('click', () => {
+    const id = parseInt(b.dataset.actEdit, 10);
+    const a = _acctAccum.find(x => x.id === id);
+    if (a) startAcctEdit(a);
+  }));
+  box.querySelectorAll('[data-act-refresh]').forEach(b => b.addEventListener('click', async () => {
+    const id = parseInt(b.dataset.actRefresh, 10);
+    const oldText = b.textContent;
+    b.textContent = '查询中…';
+    b.disabled = true;
+    try {
+      const r = await api('POST', `/api/llm/accounts/${id}/refresh-balance`);
+      if (r.balance != null && r.balance_source === 'remote') {
+        _liveBalance.set(id, { balance: r.balance, balance_currency: r.balance_currency, balance_source: 'remote' });
+        toast('已查到实时余额');
+      } else if (r.balance != null) {
+        _liveBalance.delete(id);
+        toast(`provider 接口未返回，使用本地录入值`);
+      } else {
+        _liveBalance.delete(id);
+        toast('provider 不支持余额查询，可在编辑里手填', 'error');
+      }
+      _renderAcctHero();
+      _renderAcctList();
+      refreshFooterBar();
+    } catch (e) {
+      toast('查询失败：' + e.message, 'error');
+    } finally {
+      b.textContent = oldText;
+      b.disabled = false;
+    }
+  }));
+  box.querySelectorAll('[data-act-delete]').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.actDelete;
+    const a = _acctAccum.find(x => String(x.id) === String(id));
+    const ok = await confirmDialog({
+      title: '删除这个账号？',
+      body: `“${(a && (a.label || a.provider)) || id}” 将被移除，不影响已经记录的用量历史。`,
+      okText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    try { await api('DELETE', `/api/llm/accounts/${id}`); }
+    catch (e) { toast('删除失败：' + e.message, 'error'); return; }
+    toast('已删除');
+    refreshAccounts();
+    refreshFooterBar();
+  }));
+}
+
+function _switchAcctTab(tab) {
+  $$('.acct-tabs .tab').forEach(el => el.classList.toggle('active', el.dataset.acctTab === tab));
+  $$('.acct-tab-pane').forEach(el => el.classList.toggle('active', el.dataset.pane === tab));
+  $('acctTabHint').textContent = tab === 'trend'
+    ? '近 30 天每日 token 总量'
+    : (_acctEditingId ? `编辑账号 #${_acctEditingId}` : '新增一个 LLM 账号');
+}
+
+function startAcctEdit(a) {
+  _acctEditingId = a ? a.id : null;
+  $('acctEditTitle').textContent = a ? `编辑账号 #${a.id}` : '新增账号';
+  $('acctEditCancel').style.display = a ? '' : 'none';
+  const f = $('acctForm');
+  if (a) {
+    f.elements['provider'].value = a.provider || 'deepseek';
+    f.elements['label'].value    = a.label || '';
+    f.elements['base_url'].value = a.base_url || '';
+    f.elements['api_key'].value  = a.api_key || '';
+    f.elements['chat_model'].value    = a.chat_model || '';
+    f.elements['summary_model'].value = a.summary_model || '';
+    f.elements['balance'].value = a.balance ?? '';
+    f.elements['balance_currency'].value = a.balance_currency || 'CNY';
+  } else {
+    f.reset();
+    f.elements['provider'].value = 'deepseek';
+    f.elements['base_url'].value = 'https://api.deepseek.com';
+    f.elements['chat_model'].value = 'deepseek-chat';
+    f.elements['summary_model'].value = 'deepseek-chat';
+    f.elements['balance_currency'].value = 'CNY';
+  }
+  _switchAcctTab('form');
+  // 切到表单 tab 后滚到表单
+  const pane = document.querySelector('[data-pane="form"]');
+  if (pane) pane.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+$$('.acct-tabs .tab').forEach(el => el.addEventListener('click', () => {
+  if (el.dataset.acctTab === 'form' && _acctEditingId == null) {
+    startAcctEdit(null);
+  } else {
+    _switchAcctTab(el.dataset.acctTab);
+  }
+}));
+$('acctAddBtn').addEventListener('click', () => startAcctEdit(null));
+// 月份/年份选择器（事件 listener 用 closure 引用 _acctView* 变量，
+// listener 触发时 TDZ 早就过了，所以这里只是登记，不会立即读 _acctViewYear）
+$('acctMonthPrev').addEventListener('click', () => _stepAcctMonth(-1));
+$('acctMonthNext').addEventListener('click', () => _stepAcctMonth(1));
+$('acctMonthToday').addEventListener('click', () => {
+  const now = new Date();
+  _acctViewYear = now.getFullYear();
+  _acctViewMonth = now.getMonth();
+  _populateAcctPicker();
+  refreshUsageChart();
+});
+$('acctYearSel').addEventListener('change', (e) => {
+  _acctViewYear = parseInt(e.target.value, 10);
+  refreshUsageChart();
+});
+$('acctMonthSel').addEventListener('change', (e) => {
+  _acctViewMonth = parseInt(e.target.value, 10);
+  refreshUsageChart();
+});
+// ⚠️ 这里 *不要* 立即调用 _populateAcctPicker —— 因为 _acctViewYear 是
+// 用 let 声明的，在它定义之前调用会触发 TDZ ReferenceError，导致整段
+// 脚本中断、全页空白。改为放到 bootstrap() 末尾再触发。
+$('acctEditCancel').addEventListener('click', () => {
+  _acctEditingId = null;
+  $('acctEditTitle').textContent = '新增账号';
+  $('acctEditCancel').style.display = 'none';
+  $('acctForm').reset();
+  _switchAcctTab('trend');
+});
+$('acctFormReset').addEventListener('click', () => {
+  $('acctForm').reset();
+  toast('已清空表单');
+});
+$('acctForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const data = {
+    provider: fd.get('provider') || 'deepseek',
+    label: fd.get('label') || '',
+    base_url: fd.get('base_url') || '',
+    api_key: fd.get('api_key') || '',
+    chat_model: fd.get('chat_model') || '',
+    summary_model: fd.get('summary_model') || '',
+    balance: parseFloat(fd.get('balance')) || 0,
+    balance_currency: fd.get('balance_currency') || 'CNY',
+  };
+  if (!data.api_key.trim()) {
+    toast('API Key 不能为空', 'error');
+    return;
+  }
+  try {
+    if (_acctEditingId) {
+      await api('PUT', `/api/llm/accounts/${_acctEditingId}`, data);
+    } else {
+      await api('POST', '/api/llm/accounts', data);
+    }
+  } catch (err) { toast('保存失败：' + err.message, 'error'); return; }
+  toast('已保存，立即生效');
+  _acctEditingId = null;
+  $('acctEditTitle').textContent = '新增账号';
+  $('acctEditCancel').style.display = 'none';
+  $('acctForm').reset();
+  _switchAcctTab('trend');
+  refreshAccounts();
+  refreshFooterBar();
+});
+
+async function refreshAccounts() {
+  try {
+    const r = await api('GET', '/api/llm/accounts');
+    _acctAccum = r.items || [];
+  } catch { _acctAccum = []; }
+  // 当前生效账号顺手探一次远程余额（已由后端缓存 60s）
+  const active = _acctAccum.find(a => a.is_active);
+  if (active) {
+    try {
+      const live = await api('GET', '/api/llm/active');
+      if (live && live.balance != null && live.balance_source === 'remote') {
+        _liveBalance.set(active.id, {
+          balance: live.balance,
+          balance_currency: live.balance_currency,
+          balance_source: 'remote',
+        });
+      }
+    } catch {}
+  }
+  _renderAcctHero();
+  _renderAcctList();
+  refreshUsageChart();
+}
+
+/* ---------- 月份选择（年份 + 月份联动）---------- */
+let _acctViewYear = new Date().getFullYear();
+let _acctViewMonth = new Date().getMonth(); // 0-based
+const _MONTH_NAMES = ['1 月','2 月','3 月','4 月','5 月','6 月','7 月','8 月','9 月','10 月','11 月','12 月'];
+
+function _populateAcctPicker() {
+  const ySel = $('acctYearSel'), mSel = $('acctMonthSel');
+  if (!ySel || !mSel) return;
+  // 年份范围：当前年往前推 6 年，再到当前年
+  const now = new Date();
+  const curY = now.getFullYear();
+  const years = [];
+  for (let y = curY - 6; y <= curY; y++) years.push(y);
+  ySel.innerHTML = years.map(y => `<option value="${y}">${y} 年</option>`).join('');
+  ySel.value = String(_acctViewYear);
+  mSel.innerHTML = _MONTH_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
+  mSel.value = String(_acctViewMonth);
+}
+
+function _stepAcctMonth(delta) {
+  const d = new Date(_acctViewYear, _acctViewMonth + delta, 1);
+  _acctViewYear = d.getFullYear();
+  _acctViewMonth = d.getMonth();
+  _populateAcctPicker();
+  refreshUsageChart();
+}
+
+async function refreshUsageChart() {
+  // 今日 KPI（保持不变）
+  let today = { tokens:0, calls:0 };
+  try { today = await api('GET', '/api/usage/today'); } catch {}
+  $('acctTodayTokens').textContent = (today.tokens || 0).toLocaleString();
+  $('acctTodayCalls').textContent  = today.calls || 0;
+
+  // 拉够覆盖该月 + 一周对齐补齐位的数据 —— 直接拉近 400 天涵盖前后 6 年也无所谓
+  // 简单点：拉 daily=400，过滤到本月范围
+  let items = [];
+  try {
+    const d = await api('GET', '/api/usage/daily?days=400');
+    items = d.items || [];
+  } catch {}
+  const map = new Map(items.map(x => [x.day, x]));
+
+  // 构造选定月份的视图：第一天 → 当月最后一天，再前后补齐到完整周（周日列首）
+  const Y = _acctViewYear, M = _acctViewMonth;
+  const firstOfMonth = new Date(Y, M, 1);
+  const lastOfMonth  = new Date(Y, M + 1, 0);
+  const start = new Date(firstOfMonth);
+  start.setDate(start.getDate() - start.getDay()); // 对齐到周日
+  const end = new Date(lastOfMonth);
+  end.setDate(end.getDate() + (6 - end.getDay())); // 对齐到周六
+
+  const ymdStr = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const todayYmd = ymdStr(new Date());
+
+  const cells = [];
+  const cur = new Date(start);
+  while (cur <= end) {
+    const ymd = ymdStr(cur);
+    const v = map.get(ymd);
+    cells.push({
+      day: ymd,
+      d: cur.getDate(),
+      tokens: v ? v.tokens : 0,
+      calls: v ? v.calls : 0,
+      isToday: ymd === todayYmd,
+      inMonth: cur.getMonth() === M && cur.getFullYear() === Y,
+    });
+    cur.setDate(cur.getDate() + 1);
+  }
+  // 仅根据"本月"格子算分桶最大值；月外格子作为浅色占位
+  const inMonthCells = cells.filter(c => c.inMonth);
+  const max = Math.max(1, ...inMonthCells.map(c => c.tokens));
+  const total = inMonthCells.reduce((s, c) => s + c.tokens, 0);
+  const calls = inMonthCells.reduce((s, c) => s + c.calls, 0);
+
+  // 顶部 KPI："近 30 天" 改为"本月合计"
+  $('acctTrendTotal').textContent = total >= 1000 ? `${(total/1000).toFixed(1)}k` : total.toLocaleString();
+  // KPI 标签静态显示"本月"，文案在 hero 处：直接用 element 已有 label
+  // 同时刷新工具条统计
+  $('acctMonthStat').textContent = `本月合计 ${total.toLocaleString()} tokens · ${calls} 次调用`;
+
+  function levelOf(t, isMonth) {
+    if (!isMonth) return 'out-of-month';
+    if (!t) return 'empty';
+    const r = t / max;
+    if (r >= 0.75) return 'lv4';
+    if (r >= 0.45) return 'lv3';
+    if (r >= 0.20) return 'lv2';
+    return 'lv1';
+  }
+  const heads = ['日','一','二','三','四','五','六'];
+  $('acctHeatHead').innerHTML = heads.map(h => `<div>${h}</div>`).join('');
+  $('acctChart').innerHTML = cells.map(c => {
+    const lv = levelOf(c.tokens, c.inMonth);
+    const tk = c.tokens > 0 ? (c.tokens >= 1000 ? `${(c.tokens/1000).toFixed(1)}k` : c.tokens) : '';
+    const tipBody = c.inMonth
+      ? `${c.day}<br>${c.tokens.toLocaleString()} tokens · ${c.calls} 次`
+      : `${c.day}<br>(不在选定月份)`;
+    return `<div class="hcell ${lv} ${c.isToday?'is-today':''} ${c.inMonth?'':'oom'}">
+      <div class="d">${c.d}</div>
+      ${tk ? `<div class="tk">${tk}</div>` : ''}
+      <div class="tip">${tipBody}</div>
+    </div>`;
+  }).join('');
+  // 右上角范围
+  $('acctAxis').textContent = `${Y} 年 ${M + 1} 月`;
+  // 修正 KPI 顶部标签：把"近 30 天"改成"本月"
+  const trendLabel = $('acctTrendTotal') && $('acctTrendTotal').nextElementSibling;
+  if (trendLabel && trendLabel.classList.contains('kpi-label')) {
+    trendLabel.textContent = `${M + 1} 月用量`;
+  }
+}
+
+/* =====================================================================
+   全局底部栏：今日 token + 余额（轮询 30s）
+   ===================================================================== */
+async function refreshFooterBar() {
+  try {
+    const t = await api('GET', '/api/usage/today');
+    $('footerTokens').textContent  = (t.tokens || 0).toLocaleString();
+    $('footerCalls').textContent   = (t.calls || 0);
+    if (t.balance != null) {
+      const tag = t.balance_source === 'remote' ? ' 实时' : (t.balance_source === 'local' ? ' 本地' : '');
+      $('footerBalance').textContent = `${t.balance_currency || ''} ${Number(t.balance).toFixed(2)}${tag}`;
+    } else {
+      $('footerBalance').textContent = '未配置';
+    }
+    const link = $('footerOpenAccount');
+    link.textContent = t.configured ? '前往账户管理 →' : '⚠ 去配置 LLM 账号 →';
+    link.classList.toggle('warn', !t.configured);
+  } catch {
+    $('footerTokens').textContent  = '--';
+    $('footerCalls').textContent   = '--';
+    $('footerBalance').textContent = '--';
+  }
+}
+$('footerOpenAccount').addEventListener('click', () => { location.hash = '#account'; });
+
+/* =====================================================================
+   日历每日心情集成（覆盖 refreshCalendar）
+   ===================================================================== */
+const _origRefreshCalendar = refreshCalendar;
+let _calDailyTokens = new Map();    // ymd -> {tokens, calls} 给 day panel 顶部用
+let _calDailyMoods  = new Map();    // ymd -> {mood, preview, turn_count}
+const CAL_MOOD_EMOJI = {
+  happy:'😺', neutral:'🐱', sleepy:'😴', hungry:'😿', excited:'😸', sick:'🤒',
+};
+const CAL_MOOD_LABEL = {
+  happy:'心情很好', neutral:'平静', sleepy:'好困', hungry:'有点饿', excited:'超开心', sick:'不太舒服',
+};
+refreshCalendar = async function() {
+  // token 用量保留供 day panel 顶部展示
+  try {
+    const r = await api('GET', '/api/usage/daily?days=60');
+    _calDailyTokens = new Map((r.items || []).map(x => [x.day, x]));
+  } catch { _calDailyTokens = new Map(); }
+  await _origRefreshCalendar();
+  // _calSummaries（在 _origRefreshCalendar 内被填）此刻包含每日的 mood 字段
+  _calDailyMoods = new Map();
+  if (typeof _calSummaries !== 'undefined') {
+    _calSummaries.forEach((v, day) => {
+      if (v && v.mood) _calDailyMoods.set(day, v);
+    });
+  }
+  // 给每个 cell 加 emoji 角标
+  $$('#calGrid .cell[data-day]').forEach(el => {
+    // 清掉之前可能残留的 token tag
+    const oldTok = el.querySelector('.tok-tag');
+    if (oldTok) oldTok.remove();
+    const oldMood = el.querySelector('.mood-tag');
+    if (oldMood) oldMood.remove();
+    const m = _calDailyMoods.get(el.dataset.day);
+    if (m && m.mood && CAL_MOOD_EMOJI[m.mood]) {
+      const tag = document.createElement('div');
+      tag.className = 'mood-tag';
+      tag.textContent = CAL_MOOD_EMOJI[m.mood];
+      tag.title = `${m.mood} · ${CAL_MOOD_LABEL[m.mood] || ''} · ${m.turn_count || 0} 轮对话`;
+      el.appendChild(tag);
+    }
+  });
+};
+
+/* =====================================================================
+   友好空日提示（覆盖 selectDay / regenerateDay）
+   ===================================================================== */
+const _origRegenerateDay = regenerateDay;
+regenerateDay = async function(ymd) {
+  $('dayBody').innerHTML = '<div class="empty">总结中…（可能需要 30 秒）</div>';
+  try {
+    const data = await api('POST', `/api/memory/day/${ymd}/summarize`);
+    if (data && data.empty) {
+      $('dayBody').innerHTML = `
+        <div class="empty" style="line-height:1.8;">
+          <div style="font-size:32px; margin-bottom:8px;">🐱💤</div>
+          <div>${escapeHtml(data.message || '这一天没有对话')}</div>
+        </div>`;
+      return;
+    }
+    renderDay(data);
+    refreshCalendar();
+    toast('已生成日记');
+  } catch (e) { toast('生成失败：' + e.message, 'error'); }
+};
+
+/* =====================================================================
    启动
    ===================================================================== */
 async function bootstrap() {
+  // 未配置 LLM 账号时默认跳转到账户页
+  let needConfig = false;
+  try {
+    const a = await api('GET', '/api/llm/active');
+    needConfig = !a.configured;
+  } catch {}
+  if (needConfig && !location.hash) {
+    location.hash = '#account';
+    showPage('account');
+  }
+
   renderProfile(await fetchProfile());
   refreshPet();
-  refreshMemoryDeviceList().then(refreshMemory);
+  refreshMemory();
   refreshDevice();
   refreshSkills();
+  refreshCalendar();
+  // 月份选择器在这里第一次填充：此时 _acctViewYear/_acctViewMonth 已经初始化
+  if (typeof _populateAcctPicker === 'function') _populateAcctPicker();
+  refreshAccounts();
+  refreshFooterBar();
+  refreshPersonas();
+  loadGreeting();
+
+  // 切换到账户页时强制刷一次（可能用户改完后切回来）
+  window.addEventListener('hashchange', () => {
+    const p = location.hash.slice(1);
+    if (p === 'account') refreshAccounts();
+  });
 }
 bootstrap();
 setInterval(refreshDevice, 1000);
 setInterval(refreshPet, 5000);
-setInterval(refreshMemoryDeviceList, 10000);
+setInterval(refreshMemory, 10000);
+setInterval(refreshFooterBar, 30000);
 </script>
 </body>
 </html>

@@ -23,6 +23,7 @@ from ..config import (
     ASR_STRONG_RETRY_MIN_RMS,
 )
 from ..utils.audio import wav_stats
+from ..utils.adpcm import adpcm_to_wav
 
 try:
     from faster_whisper import WhisperModel
@@ -165,3 +166,13 @@ async def process_asr_wav(device_id: str, wav_bytes: bytes, transport: str = "wi
         }
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+async def process_asr_adpcm(
+    device_id: str, adpcm_bytes: bytes, transport: str = "wifi-adpcm"
+) -> dict[str, Any]:
+    """Decode firmware IMA-ADPCM and run the normal ASR pipeline."""
+    wav_bytes = adpcm_to_wav(adpcm_bytes)
+    if not wav_bytes or len(wav_bytes) < 48:
+        raise HTTPException(status_code=400, detail="Expected firmware ADPCM body.")
+    return await process_asr_wav(device_id, wav_bytes, transport)

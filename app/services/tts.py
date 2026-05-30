@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import shlex
 import subprocess
 import tempfile
 import time
@@ -18,8 +19,11 @@ from ..config import (
     CACHE_DIR,
     FFMPEG_BIN,
     MACOS_SAY_VOICE,
+    MLX_TTS_COMMAND,
+    MLX_TTS_MODEL,
     TTS_CUTE_FILTER_ENABLED,
     TTS_EDGE_ENABLED,
+    TTS_ENGINE,
     TTS_EDGE_RETRY_SECONDS,
     VOICE_PRESETS,
 )
@@ -118,6 +122,45 @@ def _tts_macos_say(text: str, wav_path: Path) -> None:
             raise RuntimeError("macOS say produced an empty WAV")
     finally:
         aiff_path.unlink(missing_ok=True)
+
+
+def _tts_mlx_accelerated(text: str, wav_path: Path) -> None:
+    """Run an optional MLX/Metal TTS command on Apple Silicon, then normalize WAV."""
+    if not MLX_TTS_COMMAND:
+        raise RuntimeError("TABLEPET_MLX_TTS_COMMAND is not configured")
+    require_ffmpeg()
+    raw_path = wav_path.with_name(f"{wav_path.stem}_mlx.wav")
+    command = MLX_TTS_COMMAND.format(
+        text=text,
+        out=str(raw_path),
+        model=MLX_TTS_MODEL,
+    )
+    subprocess.run(shlex.split(command), check=True, capture_output=True, text=True)
+    if not raw_path.exists() or raw_path.stat().st_size < 2048:
+        raise RuntimeError("MLX TTS command produced an empty file")
+    try:
+        subprocess.run(
+            [
+                FFMPEG_BIN,
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(raw_path),
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-sample_fmt",
+                "s16",
+                str(wav_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        raw_path.unlink(missing_ok=True)
 
 
 async def _tts_edge_neural(
@@ -243,21 +286,38 @@ async def generate_tts_wav(device_id: str, payload: TtsRequest, transport: str =
 
     async with state.TTS_LOCK:
         try:
-            if not TTS_EDGE_ENABLED:
-                raise RuntimeError("edge-tts disabled for low-latency local mode")
-            if time.time() < state.EDGE_TTS_DISABLED_UNTIL:
-                raise RuntimeError("edge-tts cooldown active")
-            await _tts_edge_neural(
-                payload.text,
-                wav_path,
-                payload.voice,
-                payload.rate,
-                payload.pitch,
-                payload.volume,
-            )
-            engine = "edge-neural"
+            if TTS_ENGINE == "mlx":
+                _tts_mlx_accelerated(payload.text, wav_path)
+                engine = "mlx-metal"
+            else:
+                raise RuntimeError("MLX engine not selected")
+        except Exception as mlx_exc:
+            if TTS_ENGINE == "mlx":
+                wav_path.unlink(missing_ok=True)
+                print(f"MLX TTS unavailable, falling back: {mlx_exc}")
+        try:
+            if not wav_path.exists() or wav_path.stat().st_size < 2048:
+                wav_path.unlink(missing_ok=True)
+                if TTS_ENGINE == "macos-say":
+                    raise RuntimeError("edge skipped because TABLEPET_TTS_ENGINE=macos-say")
+                if TTS_ENGINE == "mlx":
+                    raise RuntimeError("edge skipped after MLX failure")
+                if not TTS_EDGE_ENABLED:
+                    raise RuntimeError("edge-tts disabled for low-latency local mode")
+                if time.time() < state.EDGE_TTS_DISABLED_UNTIL:
+                    raise RuntimeError("edge-tts cooldown active")
+                await _tts_edge_neural(
+                    payload.text,
+                    wav_path,
+                    payload.voice,
+                    payload.rate,
+                    payload.pitch,
+                    payload.volume,
+                )
+                engine = "edge-neural"
         except Exception as edge_exc:
-            state.EDGE_TTS_DISABLED_UNTIL = time.time() + TTS_EDGE_RETRY_SECONDS
+            if not wav_path.exists() or wav_path.stat().st_size < 2048:
+                state.EDGE_TTS_DISABLED_UNTIL = time.time() + TTS_EDGE_RETRY_SECONDS
             wav_path.unlink(missing_ok=True)
             try:
                 _tts_macos_say(payload.text, wav_path)

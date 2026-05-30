@@ -1,3 +1,4 @@
+# ─── Python ───────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -5,7 +6,7 @@ __pycache__/
 venv/
 .env
 
-# Runtime caches & generated assets
+# ─── 运行时缓存 / 生成产物 ─────────────────────────────────
 .cache/
 !.cache/.gitkeep
 media/**/*.wav
@@ -19,7 +20,18 @@ media/**/*.ogg
 models/*.onnx
 !models/.gitkeep
 
-# IDE
+# ─── 本地数据库（用户级状态、记忆、画像）──────────────────
+# 仓库不携带任何用户数据；首次启动时由 app/storage/db.py 自动建表。
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.sqlite*
+!data/.gitkeep
+
+# ─── IDE / OS ─────────────────────────────────────────────
 .idea/
 .vscode/
 .DS_Store
+
+# ─── 历史 Codex 临时目录（已迁移到主 app/）─────────────────
+Codex改动后的app/
