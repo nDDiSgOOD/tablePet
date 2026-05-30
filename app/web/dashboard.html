@@ -1852,30 +1852,38 @@
       color:var(--text);
       letter-spacing:0.01em;
       text-wrap:pretty;
-      max-width:72ch;
     }
     .ai-profile-narration::first-letter {
       font-weight:600;
       color:var(--accent);
     }
     .ai-profile-tracks {
-      display:grid;
-      grid-template-columns:auto 1fr;
-      gap:10px var(--s-4);
-      align-items:start;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
       padding-top:var(--s-3);
       border-top:1px dashed color-mix(in oklch, var(--line) 40%, transparent);
+    }
+    .ai-profile-track {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:var(--s-3);
+      flex-wrap:wrap;
     }
     .ai-profile-track-label {
       font-size:var(--fs-xs);
       color:var(--muted);
-      padding-top:6px;
       letter-spacing:0.06em;
       flex-shrink:0;
       font-weight:500;
+      min-width:32px;
     }
     .ai-profile-chips {
-      display:flex; flex-wrap:wrap; gap:6px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      justify-content:center;
     }
     .ai-profile-chip {
       display:inline-flex; align-items:center;
@@ -5055,14 +5063,18 @@ async function refreshAiProfile() {
     const tracks = [];
     if (traitsHtml) {
       tracks.push(`
-        <div class="ai-profile-track-label">性格</div>
-        <div class="ai-profile-chips">${traitsHtml}</div>
+        <div class="ai-profile-track">
+          <div class="ai-profile-track-label">性格</div>
+          <div class="ai-profile-chips">${traitsHtml}</div>
+        </div>
       `);
     }
     if (interestsHtml) {
       tracks.push(`
-        <div class="ai-profile-track-label">兴趣</div>
-        <div class="ai-profile-chips">${interestsHtml}</div>
+        <div class="ai-profile-track">
+          <div class="ai-profile-track-label">兴趣</div>
+          <div class="ai-profile-chips">${interestsHtml}</div>
+        </div>
       `);
     }
     body.innerHTML = `
