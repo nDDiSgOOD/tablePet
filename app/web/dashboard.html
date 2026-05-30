@@ -256,6 +256,13 @@
     }
     .btn.danger { color:var(--bad); border-color:oklch(0.70 0.20 25 / 0.4); background:transparent; }
     .btn.danger:hover { background:var(--bad-soft); border-color:var(--bad); }
+    /* 通用：带图标的按钮——SVG 跟文字平齐，留 5px 间距 */
+    .btn.btn-icon-text {
+      display:inline-flex; align-items:center; gap:5px;
+    }
+    .btn.btn-icon-text svg {
+      width:13px; height:13px; flex-shrink:0;
+    }
 
     /* ----- 徽章 ----- */
     .badge {
@@ -890,7 +897,13 @@
     .memory-list::-webkit-scrollbar { width:8px; }
     .memory-list::-webkit-scrollbar-thumb { background:var(--line); border-radius:4px; }
     .memory-list.compact { max-height:200px; }
-    #sessionList { max-height:600px; }
+    /* 会话流水的 list 高度跟着视口走，避免外层 panel 撑出屏幕导致最后
+       一张卡的 actions 行被裁。clamp 保底 420px（小屏），上限 760px
+       （大屏不浪费）。padding-bottom 让最后一行 hover 阴影不被裁。 */
+    #sessionList {
+      max-height:clamp(420px, calc(100vh - 320px), 760px);
+      padding-bottom:var(--s-2);
+    }
     .memory-item {
       display:flex; gap:10px; align-items:center;
       padding:10px var(--s-3);
@@ -914,42 +927,123 @@
     .recent-chat .u { color:var(--accent); font-weight:500; }
     .recent-chat .a { color:var(--pink);   font-weight:500; }
 
-    /* ========== 会话列表 ========== */
+    /* ========== 会话列表 ==========
+     * 三段式 card：head（点开 viewer）/ summary（一句话总结）/ actions（按钮组）。
+     * 设计原则：
+     *   - actions 用 grid 而不是 flex-wrap：左侧 1fr 弹性吃下"活跃说明"或空，
+     *     右侧 auto 按钮一行排齐，永远不换行
+     *   - 按钮统一收紧到 5px 11px / fs-md，避免在窄 panel 里挤换行
+     *   - 全部 emoji 换 SVG icon（DESIGN.md anti-pattern #6：chrome 上不放 emoji）
+     *   - hover 时整卡 lift（border-color + 微 shadow），形成可点击暗示
+     */
     .session-card {
       border:1px solid var(--line-soft);
       border-radius:var(--r-md);
       background:var(--panel-2);
       overflow:hidden;
-      transition:border-color var(--t-fast);
+      transition:border-color var(--t-fast), background var(--t-fast);
     }
-    .session-card:hover { border-color:var(--line); }
+    .session-card:hover {
+      border-color:var(--line);
+      background:color-mix(in oklch, var(--panel-2) 60%, var(--panel-3));
+    }
     .session-card.active {
-      border-color:var(--accent);
-      background:linear-gradient(135deg, var(--accent-soft), oklch(0.22 0.010 85));
+      border-color:var(--accent-dim);
+      background:linear-gradient(135deg,
+        var(--accent-soft),
+        color-mix(in oklch, var(--panel-2) 85%, transparent));
     }
     .session-head {
       display:flex; gap:10px; align-items:center;
-      padding:10px var(--s-4);
+      padding:11px var(--s-4);
       cursor:pointer; user-select:none;
       transition:background var(--t-fast);
     }
-    .session-head:hover { background:var(--accent-soft); }
+    .session-head:hover { background:color-mix(in oklch, var(--accent) 8%, transparent); }
     .session-head .arrow {
       width:14px; transition:transform var(--t-fast) var(--ease-out);
       color:var(--muted);
     }
     .session-head.open .arrow { transform:rotate(90deg); }
-    .session-head .title { flex:1; font-weight:600; min-width:0; font-size:var(--fs-base); }
-    .session-head .meta  { font-size:var(--fs-xs); color:var(--muted); white-space:nowrap; font-family:var(--mono); }
-    .session-head .badges { display:flex; gap:var(--s-1); }
-    .session-actions {
-      display:flex; justify-content:flex-end; align-items:center; gap:6px;
-      padding:var(--s-2) var(--s-4);
-      border-top:1px solid var(--line-soft);
-      flex-wrap:wrap;
-      background:color-mix(in oklch, var(--panel-2) 40%, transparent);
+    .session-head .title {
+      flex:1; min-width:0;
+      font-weight:600; font-size:var(--fs-base);
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
-    .session-actions .small { margin-right:auto; }
+    .session-head .title .small { color:var(--muted); font-weight:500; margin-left:6px; }
+    .session-head .meta  {
+      font-size:var(--fs-xs); color:var(--muted);
+      white-space:nowrap; font-family:var(--mono);
+    }
+    .session-head .badges { display:flex; gap:var(--s-1); }
+
+    /* 会话概要：去掉 📝 emoji + 斜体，改为干净文字 + 内嵌 4px 暖色块（不是
+       border-left anti-pattern，而是 background-image，独立可控） */
+    .session-summary {
+      padding:8px var(--s-4) 10px;
+      font-size:var(--fs-sm);
+      color:var(--text-soft);
+      line-height:1.55;
+      border-top:1px solid var(--line-soft);
+      background:color-mix(in oklch, var(--panel-2) 85%, transparent);
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      line-clamp:2;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+    }
+
+    .session-actions {
+      display:grid;
+      grid-template-columns:1fr auto;
+      align-items:center; gap:var(--s-2);
+      padding:8px var(--s-4) 10px;
+      border-top:1px solid var(--line-soft);
+      background:color-mix(in oklch, var(--panel) 60%, transparent);
+    }
+    .session-actions > .small {
+      grid-column:1; color:var(--muted); font-size:var(--fs-xs);
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .session-actions .session-btn-group {
+      grid-column:2;
+      display:flex; gap:6px; flex-shrink:0;
+    }
+    /* 卡内按钮：比全局 .btn 略小一档，给一行能塞下多个按钮的空间 */
+    .session-actions .btn {
+      padding:5px 11px;
+      font-size:var(--fs-md);
+      font-weight:500;
+      display:inline-flex; align-items:center; gap:5px;
+    }
+    .session-actions .btn svg {
+      width:13px; height:13px;
+      flex-shrink:0;
+    }
+    /* primary 在卡内更克制：用 accent-soft 而不是实心 accent，避免和
+       sessionsActiveLabel chip 抢视觉 */
+    .session-actions .btn.primary {
+      background:var(--accent-soft);
+      border-color:var(--accent-dim);
+      color:var(--accent);
+    }
+    .session-actions .btn.primary:hover {
+      background:color-mix(in oklch, var(--accent) 22%, transparent);
+      border-color:var(--accent);
+      color:var(--text);
+    }
+    /* danger 不再透底色 —— 在 panel 半透明 actions 上加一个 bad-soft 背景，
+       对比度才够；hover 时变实色 + 文字反白 */
+    .session-actions .btn.danger {
+      background:var(--bad-soft);
+      border-color:oklch(0.70 0.20 25 / 0.35);
+      color:var(--bad);
+    }
+    .session-actions .btn.danger:hover {
+      background:var(--bad);
+      border-color:var(--bad);
+      color:oklch(0.99 0 0);
+    }
 
     /* ========== 完整对话流水 ========== */
     .turn-row {
@@ -2442,20 +2536,42 @@
       </div>
 
       <div class="panel" style="margin-top:14px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:var(--s-3); margin-bottom:10px; flex-wrap:wrap;">
           <div class="panel-title" style="margin:0;">会话流水</div>
-          <div style="display:flex; gap:8px; align-items:center;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <span class="small" id="sessionsActiveLabel">--</span>
-            <button class="btn" id="sessionsMultiBtn">☑ 多选</button>
-            <button class="btn danger" id="sessionsBatchDelBtn" style="display:none;">删除选中</button>
-            <button class="btn" id="sessionsRefreshBtn">🔄 刷新</button>
+            <button class="btn btn-icon-text" id="sessionsMultiBtn" title="进入多选模式">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2.5" y="2.5" width="11" height="11" rx="2"/>
+                <path d="M5.5 8 L7.3 9.8 L10.8 6"/>
+              </svg>
+              多选
+            </button>
+            <button class="btn danger btn-icon-text" id="sessionsBatchDelBtn" style="display:none;" title="删除已勾选的会话">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 4.5 H13 M5.5 4.5 V3.2 C5.5 2.5 6 2 6.7 2 H9.3 C10 2 10.5 2.5 10.5 3.2 V4.5 M4.5 4.5 L5 13 C5 13.6 5.5 14 6 14 H10 C10.5 14 11 13.6 11 13 L11.5 4.5"/>
+              </svg>
+              删除选中
+            </button>
+            <button class="btn btn-icon-text" id="sessionsRefreshBtn" title="重新拉取会话流水">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2.5 8 A5.5 5.5 0 0 1 13.5 8 M13.5 8 V5 M13.5 8 H10.5"/>
+                <path d="M13.5 8 A5.5 5.5 0 0 1 2.5 8 M2.5 8 V11 M2.5 8 H5.5"/>
+              </svg>
+              刷新
+            </button>
           </div>
         </div>
         <div id="sessionList" class="memory-list">
           <div class="empty">点击右上角刷新加载</div>
         </div>
         <div style="text-align:center; margin-top:8px;">
-          <button class="btn" id="sessionsLoadMoreBtn" style="display:none;">加载更早 ⌄</button>
+          <button class="btn btn-icon-text" id="sessionsLoadMoreBtn" style="display:none;">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6 L8 10 L12 6"/>
+            </svg>
+            加载更早
+          </button>
         </div>
       </div>
     </section>
@@ -3620,13 +3736,32 @@ function _renderSessionCard(s) {
         <div class="meta">${escapeHtml(meta)}</div>
         ${active ? '<span class="badge ok">进行中</span>' : '<span class="badge muted">已归档</span>'}
       </div>
-      ${s.summary ? `<div class="session-summary">📝 ${escapeHtml(s.summary)}</div>` : ''}
+      ${s.summary ? `<div class="session-summary">${escapeHtml(s.summary)}</div>` : ''}
       <div class="session-actions">
-        <button class="btn" data-open-viewer="${s.id}">👁 查看会话</button>
         ${active
-          ? '<span class="small" style="color:var(--muted);">活跃会话只能在“对话”页点🗑️结束</span>'
-          : `<button class="btn primary" data-resume-session="${s.id}">▶ 接着聊</button>
-             <button class="btn danger" data-del-session="${s.id}">删除整个会话</button>`}
+          ? '<span class="small">活跃会话只能在“对话”页结束</span>'
+          : '<span></span>'}
+        <div class="session-btn-group">
+          <button class="btn" data-open-viewer="${s.id}" title="查看完整对话">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1.5 8 C3 4.5 5 3 8 3 C11 3 13 4.5 14.5 8 C13 11.5 11 13 8 13 C5 13 3 11.5 1.5 8 Z"/>
+              <circle cx="8" cy="8" r="2"/>
+            </svg>
+            查看
+          </button>
+          ${active
+            ? ''
+            : `<button class="btn primary" data-resume-session="${s.id}" title="把这条会话续接为当前对话">
+                 <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3 L13 8 L4 13 Z"/></svg>
+                 接着聊
+               </button>
+               <button class="btn danger" data-del-session="${s.id}" title="删除这条会话及其全部对话">
+                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                   <path d="M3 4.5 H13 M5.5 4.5 V3.2 C5.5 2.5 6 2 6.7 2 H9.3 C10 2 10.5 2.5 10.5 3.2 V4.5 M4.5 4.5 L5 13 C5 13.6 5.5 14 6 14 H10 C10.5 14 11 13.6 11 13 L11.5 4.5"/>
+                 </svg>
+                 删除
+               </button>`}
+        </div>
       </div>
     </div>`;
 }
@@ -3943,7 +4078,11 @@ $('sessionsMultiBtn').addEventListener('click', () => {
   const list = $('sessionList');
   const on = list.classList.toggle('sessions-multi-on');
   $('sessionsBatchDelBtn').style.display = on ? '' : 'none';
-  $('sessionsMultiBtn').textContent = on ? '✕ 退出多选' : '☑ 多选';
+  // 切换文字时连 SVG 一起重写，避免 textContent 把 icon 清掉
+  const btn = $('sessionsMultiBtn');
+  btn.innerHTML = on
+    ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>退出多选'
+    : '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8 L7.3 9.8 L10.8 6"/></svg>多选';
   if (!on) list.querySelectorAll('input[data-pick-session]').forEach(i => { i.checked = false; });
 });
 $('sessionsBatchDelBtn').addEventListener('click', async () => {
