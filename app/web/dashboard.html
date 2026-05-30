@@ -256,6 +256,13 @@
     }
     .btn.danger { color:var(--bad); border-color:oklch(0.70 0.20 25 / 0.4); background:transparent; }
     .btn.danger:hover { background:var(--bad-soft); border-color:var(--bad); }
+    /* 通用：带图标的按钮——SVG 跟文字平齐，留 5px 间距 */
+    .btn.btn-icon-text {
+      display:inline-flex; align-items:center; gap:5px;
+    }
+    .btn.btn-icon-text svg {
+      width:13px; height:13px; flex-shrink:0;
+    }
 
     /* ----- 徽章 ----- */
     .badge {
@@ -890,7 +897,13 @@
     .memory-list::-webkit-scrollbar { width:8px; }
     .memory-list::-webkit-scrollbar-thumb { background:var(--line); border-radius:4px; }
     .memory-list.compact { max-height:200px; }
-    #sessionList { max-height:600px; }
+    /* 会话流水的 list 高度跟着视口走，避免外层 panel 撑出屏幕导致最后
+       一张卡的 actions 行被裁。clamp 保底 420px（小屏），上限 760px
+       （大屏不浪费）。padding-bottom 让最后一行 hover 阴影不被裁。 */
+    #sessionList {
+      max-height:clamp(420px, calc(100vh - 320px), 760px);
+      padding-bottom:var(--s-2);
+    }
     .memory-item {
       display:flex; gap:10px; align-items:center;
       padding:10px var(--s-3);
@@ -914,42 +927,131 @@
     .recent-chat .u { color:var(--accent); font-weight:500; }
     .recent-chat .a { color:var(--pink);   font-weight:500; }
 
-    /* ========== 会话列表 ========== */
+    /* ========== 会话列表 ==========
+     * 三段式 card：head（点开 viewer）/ summary（一句话总结）/ actions（按钮组）。
+     * 设计原则：
+     *   - actions 用 grid 而不是 flex-wrap：左侧 1fr 弹性吃下"活跃说明"或空，
+     *     右侧 auto 按钮一行排齐，永远不换行
+     *   - 按钮统一收紧到 5px 11px / fs-md，避免在窄 panel 里挤换行
+     *   - 全部 emoji 换 SVG icon（DESIGN.md anti-pattern #6：chrome 上不放 emoji）
+     *   - hover 时整卡 lift（border-color + 微 shadow），形成可点击暗示
+     */
     .session-card {
       border:1px solid var(--line-soft);
       border-radius:var(--r-md);
       background:var(--panel-2);
       overflow:hidden;
-      transition:border-color var(--t-fast);
+      flex-shrink:0;  /* ★ 防止父 flex 容器把卡压缩，导致 actions
+                         被 .session-card 的 overflow:hidden 切掉，
+                         视觉上像 summary 和按钮"重叠" */
+      transition:border-color var(--t-fast), background var(--t-fast);
     }
-    .session-card:hover { border-color:var(--line); }
+    .session-card:hover {
+      border-color:var(--line);
+      background:color-mix(in oklch, var(--panel-2) 60%, var(--panel-3));
+    }
     .session-card.active {
-      border-color:var(--accent);
-      background:linear-gradient(135deg, var(--accent-soft), oklch(0.22 0.010 85));
+      border-color:var(--accent-dim);
+      background:linear-gradient(135deg,
+        var(--accent-soft),
+        color-mix(in oklch, var(--panel-2) 85%, transparent));
     }
     .session-head {
       display:flex; gap:10px; align-items:center;
-      padding:10px var(--s-4);
+      padding:11px var(--s-4);
       cursor:pointer; user-select:none;
       transition:background var(--t-fast);
     }
-    .session-head:hover { background:var(--accent-soft); }
+    .session-head:hover { background:color-mix(in oklch, var(--accent) 8%, transparent); }
     .session-head .arrow {
       width:14px; transition:transform var(--t-fast) var(--ease-out);
       color:var(--muted);
     }
     .session-head.open .arrow { transform:rotate(90deg); }
-    .session-head .title { flex:1; font-weight:600; min-width:0; font-size:var(--fs-base); }
-    .session-head .meta  { font-size:var(--fs-xs); color:var(--muted); white-space:nowrap; font-family:var(--mono); }
-    .session-head .badges { display:flex; gap:var(--s-1); }
-    .session-actions {
-      display:flex; justify-content:flex-end; align-items:center; gap:6px;
-      padding:var(--s-2) var(--s-4);
-      border-top:1px solid var(--line-soft);
-      flex-wrap:wrap;
-      background:color-mix(in oklch, var(--panel-2) 40%, transparent);
+    .session-head .title {
+      flex:1; min-width:0;
+      font-weight:600; font-size:var(--fs-base);
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
-    .session-actions .small { margin-right:auto; }
+    .session-head .title .small { color:var(--muted); font-weight:500; margin-left:6px; }
+    .session-head .meta  {
+      font-size:var(--fs-xs); color:var(--muted);
+      white-space:nowrap; font-family:var(--mono);
+    }
+    .session-head .badges { display:flex; gap:var(--s-1); }
+
+    /* 会话概要：完整展示，不做行数截断。
+     *
+     * 历史教训：之前加了 -webkit-line-clamp:2 + overflow:hidden，
+     * 配合中文 line-height 1.55 和紧凑 padding，descender（"了/的/那"
+     * 的下半部分）落在行盒之外被 hidden 整体砍掉，用户只能看到字的
+     * 上半身。
+     *
+     * summary 是会话的核心信息，截掉就失去意义。改成完整展示，外层
+     * sessionList 已经在管滚动，长 summary 撑高单卡也不会爆屏。
+     */
+    .session-summary {
+      padding:10px var(--s-4) 12px;
+      font-size:var(--fs-sm);
+      color:var(--text-soft);
+      line-height:1.6;
+      border-top:1px solid var(--line-soft);
+      background:color-mix(in oklch, var(--panel-2) 85%, transparent);
+      white-space:normal;
+      overflow-wrap:anywhere;
+    }
+
+    .session-actions {
+      display:grid;
+      grid-template-columns:1fr auto;
+      align-items:center; gap:var(--s-2);
+      padding:8px var(--s-4) 10px;
+      border-top:1px solid var(--line-soft);
+      background:color-mix(in oklch, var(--panel) 60%, transparent);
+    }
+    .session-actions > .small {
+      grid-column:1; color:var(--muted); font-size:var(--fs-xs);
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .session-actions .session-btn-group {
+      grid-column:2;
+      display:flex; gap:6px; flex-shrink:0;
+    }
+    /* 卡内按钮：比全局 .btn 略小一档，给一行能塞下多个按钮的空间 */
+    .session-actions .btn {
+      padding:5px 11px;
+      font-size:var(--fs-md);
+      font-weight:500;
+      display:inline-flex; align-items:center; gap:5px;
+    }
+    .session-actions .btn svg {
+      width:13px; height:13px;
+      flex-shrink:0;
+    }
+    /* primary 在卡内更克制：用 accent-soft 而不是实心 accent，避免和
+       sessionsActiveLabel chip 抢视觉 */
+    .session-actions .btn.primary {
+      background:var(--accent-soft);
+      border-color:var(--accent-dim);
+      color:var(--accent);
+    }
+    .session-actions .btn.primary:hover {
+      background:color-mix(in oklch, var(--accent) 22%, transparent);
+      border-color:var(--accent);
+      color:var(--text);
+    }
+    /* danger 不再透底色 —— 在 panel 半透明 actions 上加一个 bad-soft 背景，
+       对比度才够；hover 时变实色 + 文字反白 */
+    .session-actions .btn.danger {
+      background:var(--bad-soft);
+      border-color:oklch(0.70 0.20 25 / 0.35);
+      color:var(--bad);
+    }
+    .session-actions .btn.danger:hover {
+      background:var(--bad);
+      border-color:var(--bad);
+      color:oklch(0.99 0 0);
+    }
 
     /* ========== 完整对话流水 ========== */
     .turn-row {
@@ -1646,20 +1748,179 @@
     }
     .viewer-body::-webkit-scrollbar { width:8px; }
     .viewer-body::-webkit-scrollbar-thumb { background:var(--line); border-radius:4px; }
+    /* 底部操作栏：grid 1fr/auto，左侧吃下'多选/接着聊'按钮组，右侧固定
+       '删除整个会话'按钮，永远不会因为窗口窄而把右侧按钮顶出去。*/
     .viewer-actions {
-      display:flex; gap:var(--s-2); align-items:center; flex-wrap:wrap;
+      display:grid;
+      grid-template-columns:1fr auto;
+      align-items:center; gap:var(--s-3);
       padding:14px 22px;
       border-top:1px solid var(--line-soft);
       background:color-mix(in oklch, var(--panel-2) 40%, transparent);
       flex-shrink:0;
     }
+    .viewer-actions .va-left,
+    .viewer-actions .va-right {
+      display:flex; gap:var(--s-2); align-items:center; flex-wrap:wrap;
+    }
+    .viewer-actions .va-right { justify-content:flex-end; }
     .viewer-actions .grow { flex:1; }
-    .session-summary {
-      padding:6px var(--s-3);
-      font-size:var(--fs-sm); color:var(--muted);
-      font-style:italic;
-      background:color-mix(in oklch, var(--panel-2) 30%, transparent);
-      border-top:1px solid var(--line-soft);
+    /* 兼容老结构（actBar 写 active 提示文字时不分左右两栏） */
+    .viewer-actions > .small {
+      grid-column:1 / -1; color:var(--muted);
+    }
+    /* viewer 内的按钮配色：danger 同样需要 bad-soft 底色，否则在半透明
+       panel 上仅靠红边几乎看不见 */
+    .viewer-actions .btn.danger {
+      background:var(--bad-soft);
+      border-color:oklch(0.70 0.20 25 / 0.35);
+      color:var(--bad);
+    }
+    .viewer-actions .btn.danger:hover {
+      background:var(--bad);
+      border-color:var(--bad);
+      color:oklch(0.99 0 0);
+    }
+    /* 旧的 .session-summary 全局兜底（padding 6px / italic / muted）已删除：
+       它后定义会覆盖会话卡内的新样式（line ~989+），导致 padding 砍成 6px
+       后中文 descender 被切，summary 看起来"只剩字的上半身"。
+       viewer 自己有 #sessionViewerSummary .session-summary 单独控制不依赖
+       这个全局规则。 */
+
+    /* =====================================================================
+     * 主人画像 —— 桌宠总结的'记忆产物'卡片
+     * --------------------------------------------------------------------
+     * 设计：
+     *   - 整张卡独占整行（不再塞 grid-2 半屏），呼吸感来自三个方向的
+     *     radial-gradient（accent 右上 + pink 左下），淡淡的暖色光晕
+     *   - title + 副标题在左，更新时间 / 重新生成按钮在右，head 用一根细
+     *     border 分隔体内
+     *   - description 用 15px / line-height 1.85 / max-width 72ch，::first-letter
+     *     用 accent 上色让段首有锚点
+     *   - traits / interests 以 dashed border 与正文分组，左侧标签 right-padding
+     *     的微小 letter-spacing
+     *   - 空态克制：一颗 14×14 的小 spark + 一行 muted 文案，不再大圆图章
+     *   - prefers-reduced-motion 下 chip hover 不动
+     * ===================================================================== */
+    .ai-profile-card {
+      position:relative;
+      padding:var(--s-5) var(--s-6) calc(var(--s-5) + 4px);
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-lg);
+      background:
+        radial-gradient(140% 100% at 100% -10%,
+          color-mix(in oklch, var(--accent) 14%, transparent) 0%,
+          transparent 55%),
+        radial-gradient(80% 70% at 0% 100%,
+          color-mix(in oklch, var(--pink) 10%, transparent) 0%,
+          transparent 60%),
+        var(--panel-2);
+      overflow:hidden;
+    }
+    .ai-profile-head {
+      display:flex; justify-content:space-between; align-items:flex-start;
+      gap:var(--s-3); margin-bottom:var(--s-4);
+      padding-bottom:var(--s-3);
+      border-bottom:1px solid color-mix(in oklch, var(--line) 50%, transparent);
+    }
+    .ai-profile-title {
+      display:inline-flex; align-items:center; gap:8px;
+      font-size:var(--fs-lg); font-weight:600;
+      letter-spacing:-0.01em; color:var(--text);
+    }
+    .ai-profile-title svg {
+      width:18px; height:18px;
+      color:var(--accent);
+    }
+    .ai-profile-title-sub {
+      display:block; font-size:var(--fs-xs); color:var(--muted);
+      font-weight:400; letter-spacing:0; margin-top:3px;
+    }
+    .ai-profile-meta {
+      display:flex; gap:8px; align-items:center; flex-shrink:0;
+    }
+    .ai-profile-meta .small {
+      color:var(--muted); font-size:var(--fs-xs); font-family:var(--mono);
+    }
+    .ai-profile-body {
+      display:flex; flex-direction:column; gap:var(--s-4);
+    }
+    .ai-profile-narration {
+      margin:0;
+      font-size:15px;
+      line-height:1.85;
+      color:var(--text);
+      letter-spacing:0.01em;
+      text-wrap:pretty;
+    }
+    .ai-profile-narration::first-letter {
+      font-weight:600;
+      color:var(--accent);
+    }
+    .ai-profile-tracks {
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding-top:var(--s-3);
+      border-top:1px dashed color-mix(in oklch, var(--line) 40%, transparent);
+    }
+    .ai-profile-track {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:var(--s-3);
+      flex-wrap:wrap;
+    }
+    .ai-profile-track-label {
+      font-size:var(--fs-xs);
+      color:var(--muted);
+      letter-spacing:0.06em;
+      flex-shrink:0;
+      font-weight:500;
+      min-width:32px;
+    }
+    .ai-profile-chips {
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      justify-content:center;
+    }
+    .ai-profile-chip {
+      display:inline-flex; align-items:center;
+      padding:4px 11px;
+      border-radius:var(--r-pill);
+      font-size:var(--fs-sm); font-weight:500; line-height:1.5;
+      transition:transform var(--t-fast) var(--ease-out),
+                 background var(--t-fast);
+    }
+    .ai-profile-chip.trait {
+      background:var(--accent-soft);
+      color:var(--accent);
+      border:1px solid var(--accent-dim);
+    }
+    .ai-profile-chip.interest {
+      background:var(--pink-soft);
+      color:var(--pink);
+      border:1px solid color-mix(in oklch, var(--pink) 30%, transparent);
+    }
+    .ai-profile-chip:hover { transform:translateY(-1px); }
+    /* 空态：克制版 —— 不用大圆图章 */
+    .ai-profile-empty {
+      padding:var(--s-3) 0;
+      display:flex; align-items:center; gap:10px;
+      color:var(--muted);
+      font-size:var(--fs-md);
+      line-height:1.55;
+    }
+    .ai-profile-empty .ai-profile-spark {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:22px; height:22px; flex-shrink:0;
+      color:var(--accent); opacity:0.7;
+    }
+    .ai-profile-empty .ai-profile-spark svg { width:14px; height:14px; }
+    @media (prefers-reduced-motion: reduce) {
+      .ai-profile-chip { transition:none; }
+      .ai-profile-chip:hover { transform:none; }
     }
 
     /* ========== 人格切换 ========== */
@@ -2284,6 +2545,17 @@
 
           <div class="panel-title" style="margin-top:24px; margin-bottom:8px;">自定义字段</div>
           <div id="customViewList"><div class="empty">暂无自定义字段</div></div>
+
+          <!-- 长期画像（profile facts） —— 从"记忆管理"页迁过来。
+               用户主动登记的'关于我自己的事实'，跟基础信息 / 自定义字段
+               同语境，留在用户简介里。-->
+          <div class="panel-title" style="margin-top:24px; margin-bottom:8px;">长期画像</div>
+          <div class="small" style="margin-bottom:10px;">主动告诉桌宠的事实，桌宠回答时会一并参考。</div>
+          <div class="memory-list compact" id="profileList"><div class="empty">还没记住任何事</div></div>
+          <div class="memory-add" style="margin-top:10px;">
+            <input id="newMemory" placeholder="比如：我喜欢喝拿铁">
+            <button class="btn primary" id="addMemoryBtn">添加</button>
+          </div>
         </div>
       </div>
 
@@ -2422,16 +2694,48 @@
       <h2 class="page-title">记忆管理</h2>
       <div class="page-sub">所有通道（web / wifi / usb）共享同一份记忆。</div>
 
-      <div class="grid grid-2">
-        <div class="panel">
-          <div class="panel-title">长期画像（profile facts）</div>
-          <div class="memory-list compact" id="profileList"><div class="empty">暂无记忆</div></div>
-          <div class="memory-add">
-            <input id="newMemory" placeholder="比如：我喜欢喝拿铁">
-            <button class="btn primary" id="addMemoryBtn">添加</button>
+      <!-- 主人画像 —— 独占整行，不再塞进 grid-2 半屏，避免大空白 + 大图标
+           组合显得乱。从'宠物日记'页迁来，替代记忆管理页原'长期画像
+           （profile facts）'位置（profile facts 已挪到用户简介页）。
+           接口仍是 GET /api/ai-profile / POST /api/ai-profile/refresh。 -->
+      <div class="panel ai-profile-card">
+        <div class="ai-profile-head">
+          <div>
+            <span class="ai-profile-title">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                   stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 3 L10.9 7 L15 8 L10.9 9 L10 13 L9.1 9 L5 8 L9.1 7 Z"/>
+                <path d="M15 13 L15.5 14.7 L17 15 L15.5 15.3 L15 17 L14.5 15.3 L13 15 L14.5 14.7 Z"
+                      opacity="0.65"/>
+              </svg>
+              主人画像
+            </span>
+            <span class="ai-profile-title-sub">桌宠根据你说的话不断总结的形象</span>
+          </div>
+          <div class="ai-profile-meta">
+            <span class="small" id="aiProfileMeta">--</span>
+            <button class="btn btn-icon-text" id="refreshAiProfileBtn" title="重新生成主人画像">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2.5 8 A5.5 5.5 0 0 1 13.5 8 M13.5 8 V5 M13.5 8 H10.5"/>
+                <path d="M13.5 8 A5.5 5.5 0 0 1 2.5 8 M2.5 8 V11 M2.5 8 H5.5"/>
+              </svg>
+              重新生成
+            </button>
           </div>
         </div>
+        <div id="aiProfileBody" class="ai-profile-body">
+          <div class="ai-profile-empty">
+            <span class="ai-profile-spark">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 3 L10.9 7 L15 8 L10.9 9 L10 13 L9.1 9 L5 8 L9.1 7 Z"/>
+              </svg>
+            </span>
+            <div>多聊几句之后再回来，画像会自动出现在这里。</div>
+          </div>
+        </div>
+      </div>
 
+      <div class="grid grid-2" style="margin-top:14px;">
         <div class="panel">
           <div class="panel-title">最近对话（recent）</div>
           <div id="recentList" class="memory-list compact"><div class="empty">暂无对话</div></div>
@@ -2439,23 +2743,63 @@
             <button class="btn danger" id="clearRecentBtn">清空最近对话</button>
           </div>
         </div>
+
+        <!-- 占位面板：未来如果要再加一栏（如向量长记忆 / 标签云），放这里。
+             暂时空着保留 grid-2 的左右轨道，让最近对话保持惯常宽度。 -->
+        <div class="panel" style="display:flex; flex-direction:column; gap:10px;">
+          <div class="panel-title">长期事实导出</div>
+          <div class="small" style="color:var(--text-soft); line-height:1.6;">
+            主动登记的事实在「用户简介 → 长期画像」里管理。<br>
+            短期记忆每隔几轮自动压缩 + 晋升到长期向量库，无需手动维护。
+          </div>
+          <div style="margin-top:auto; text-align:right;">
+            <a class="btn btn-icon-text" href="#profile" title="去用户简介管理长期画像">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3.5 8 H12.5 M9 4.5 L12.5 8 L9 11.5"/>
+              </svg>
+              去用户简介
+            </a>
+          </div>
+        </div>
       </div>
 
       <div class="panel" style="margin-top:14px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:var(--s-3); margin-bottom:10px; flex-wrap:wrap;">
           <div class="panel-title" style="margin:0;">会话流水</div>
-          <div style="display:flex; gap:8px; align-items:center;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <span class="small" id="sessionsActiveLabel">--</span>
-            <button class="btn" id="sessionsMultiBtn">☑ 多选</button>
-            <button class="btn danger" id="sessionsBatchDelBtn" style="display:none;">删除选中</button>
-            <button class="btn" id="sessionsRefreshBtn">🔄 刷新</button>
+            <button class="btn btn-icon-text" id="sessionsMultiBtn" title="进入多选模式">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2.5" y="2.5" width="11" height="11" rx="2"/>
+                <path d="M5.5 8 L7.3 9.8 L10.8 6"/>
+              </svg>
+              多选
+            </button>
+            <button class="btn danger btn-icon-text" id="sessionsBatchDelBtn" style="display:none;" title="删除已勾选的会话">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 4.5 H13 M5.5 4.5 V3.2 C5.5 2.5 6 2 6.7 2 H9.3 C10 2 10.5 2.5 10.5 3.2 V4.5 M4.5 4.5 L5 13 C5 13.6 5.5 14 6 14 H10 C10.5 14 11 13.6 11 13 L11.5 4.5"/>
+              </svg>
+              删除选中
+            </button>
+            <button class="btn btn-icon-text" id="sessionsRefreshBtn" title="重新拉取会话流水">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2.5 8 A5.5 5.5 0 0 1 13.5 8 M13.5 8 V5 M13.5 8 H10.5"/>
+                <path d="M13.5 8 A5.5 5.5 0 0 1 2.5 8 M2.5 8 V11 M2.5 8 H5.5"/>
+              </svg>
+              刷新
+            </button>
           </div>
         </div>
         <div id="sessionList" class="memory-list">
           <div class="empty">点击右上角刷新加载</div>
         </div>
         <div style="text-align:center; margin-top:8px;">
-          <button class="btn" id="sessionsLoadMoreBtn" style="display:none;">加载更早 ⌄</button>
+          <button class="btn btn-icon-text" id="sessionsLoadMoreBtn" style="display:none;">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6 L8 10 L12 6"/>
+            </svg>
+            加载更早
+          </button>
         </div>
       </div>
     </section>
@@ -2484,15 +2828,6 @@
           </div>
           <div id="dayBody" class="empty">点击左侧日期查看日记</div>
         </div>
-      </div>
-
-      <div class="panel" style="margin-top:14px;">
-        <div class="panel-title">AI 维护的用户画像</div>
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-          <button class="btn" id="refreshAiProfileBtn">🔄 重新生成</button>
-          <span class="small" id="aiProfileMeta">--</span>
-        </div>
-        <div id="aiProfileBody" class="empty">还没有生成</div>
       </div>
     </section>
 
@@ -3167,10 +3502,11 @@ $$('.navitem').forEach(n => n.addEventListener('click', () => {
 window.addEventListener('hashchange', () => {
   const page = location.hash.slice(1) || 'profile';
   showPage(page);
-  // 进入"记忆"页时自动拉一次会话流水
+  // 进入"记忆"页时自动拉一次会话流水 + AI 画像（AI 画像现在挂在记忆管理页）
   if (page === 'memory') {
     _sessionsBeforeId = null;
     if (typeof refreshSessions === 'function') refreshSessions({ append: false });
+    if (typeof refreshAiProfile === 'function') refreshAiProfile();
   }
 });
 showPage(location.hash.slice(1) || 'profile');
@@ -3397,7 +3733,7 @@ async function refreshPet() {
   $('moodBar').style.width = Math.min(100, s.mood_score) + '%';
   $('expBar').style.width = Math.min(100, s.exp || 0) + '%';
   $('lastInteract').textContent = s.last_interact_ts ? new Date(s.last_interact_ts*1000).toLocaleString() : '--';
-  $('companionDays').textContent = s.days || 0;
+  $('companionDays').textContent = s.days || 1;
   // 资料视图
   $('petInfoName').textContent = s.name || '--';
   $('petInfoPersona').textContent = s.persona || '--';
@@ -3606,7 +3942,16 @@ async function _loadSessionTurns(sid, force=false) {
 function _renderSessionCard(s) {
   const active = !s.closed_at;
   const title = s.title || (active ? '当前会话' : '未命名会话');
-  const turnCount = s.live_turn_count != null ? s.live_turn_count : (s.turn_count || 0);
+  // 计数策略修正：
+  //   - 活跃会话：用 live_turn_count（实时 SQL COUNT，准确）
+  //   - 归档会话：优先用 s.turn_count（归档时回填到 conversation_session
+  //     的最终值），因为短期记忆压缩后老 turn 的 session_id 可能为 null，
+  //     live_turn_count（COUNT(*) WHERE session_id=...）会算成 0。
+  // 之前的写法 `live_turn_count != null ? live_turn_count : turn_count`
+  // 永远走第一支（COUNT 不会返 null），导致归档会话全显示 0。
+  const turnCount = active
+    ? (s.live_turn_count != null ? s.live_turn_count : (s.turn_count || 0))
+    : (s.turn_count || s.live_turn_count || 0);
   const meta = `${turnCount} 轮 · ${_formatTimeRange(s)}`;
   const pick = active
     ? '<span class="pick"></span>'
@@ -3620,13 +3965,32 @@ function _renderSessionCard(s) {
         <div class="meta">${escapeHtml(meta)}</div>
         ${active ? '<span class="badge ok">进行中</span>' : '<span class="badge muted">已归档</span>'}
       </div>
-      ${s.summary ? `<div class="session-summary">📝 ${escapeHtml(s.summary)}</div>` : ''}
+      ${s.summary ? `<div class="session-summary">${escapeHtml(s.summary)}</div>` : ''}
       <div class="session-actions">
-        <button class="btn" data-open-viewer="${s.id}">👁 查看会话</button>
         ${active
-          ? '<span class="small" style="color:var(--muted);">活跃会话只能在“对话”页点🗑️结束</span>'
-          : `<button class="btn primary" data-resume-session="${s.id}">▶ 接着聊</button>
-             <button class="btn danger" data-del-session="${s.id}">删除整个会话</button>`}
+          ? '<span class="small">活跃会话只能在“对话”页结束</span>'
+          : '<span></span>'}
+        <div class="session-btn-group">
+          <button class="btn" data-open-viewer="${s.id}" title="查看完整对话">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1.5 8 C3 4.5 5 3 8 3 C11 3 13 4.5 14.5 8 C13 11.5 11 13 8 13 C5 13 3 11.5 1.5 8 Z"/>
+              <circle cx="8" cy="8" r="2"/>
+            </svg>
+            查看
+          </button>
+          ${active
+            ? ''
+            : `<button class="btn primary" data-resume-session="${s.id}" title="把这条会话续接为当前对话">
+                 <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3 L13 8 L4 13 Z"/></svg>
+                 接着聊
+               </button>
+               <button class="btn danger" data-del-session="${s.id}" title="删除这条会话及其全部对话">
+                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                   <path d="M3 4.5 H13 M5.5 4.5 V3.2 C5.5 2.5 6 2 6.7 2 H9.3 C10 2 10.5 2.5 10.5 3.2 V4.5 M4.5 4.5 L5 13 C5 13.6 5.5 14 6 14 H10 C10.5 14 11 13.6 11 13 L11.5 4.5"/>
+                 </svg>
+                 删除
+               </button>`}
+        </div>
       </div>
     </div>`;
 }
@@ -3737,14 +4101,39 @@ async function openSessionViewer(sid) {
   // 操作栏
   const actBar = $('sessionViewerActions');
   if (isActive) {
-    actBar.innerHTML = '<span class="small" style="color:var(--muted);">这是当前进行中的会话，结束 / 删除 请去“对话”页操作</span>';
+    actBar.innerHTML = '<span class="small">这是当前进行中的会话，结束 / 删除请去“对话”页操作</span>';
   } else {
+    // 左右两栏：左侧"接着聊 + 多选 + 删除选中"，右侧"删除整个会话"。
+    // 全部按钮加 SVG icon 替代 emoji（对齐 DESIGN.md anti-pattern #6），
+    // 让 viewer 在 96vw 窗口下也能看到完整的按钮组。
     actBar.innerHTML = `
-      <button class="btn primary" id="viewerResumeBtn">▶ 接着聊</button>
-      <button class="btn" id="viewerMultiBtn">☑ 多选消息</button>
-      <button class="btn danger" id="viewerBatchDelBtn" style="display:none;">删除选中</button>
-      <span class="grow"></span>
-      <button class="btn danger" id="viewerDelSessionBtn">🗑 删除整个会话</button>
+      <div class="va-left">
+        <button class="btn primary btn-icon-text" id="viewerResumeBtn" title="把这条会话续接为当前对话">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3 L13 8 L4 13 Z"/></svg>
+          接着聊
+        </button>
+        <button class="btn btn-icon-text" id="viewerMultiBtn" title="进入多选删除消息模式">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="2.5" width="11" height="11" rx="2"/>
+            <path d="M5.5 8 L7.3 9.8 L10.8 6"/>
+          </svg>
+          多选消息
+        </button>
+        <button class="btn danger btn-icon-text" id="viewerBatchDelBtn" style="display:none;" title="删除已勾选的消息">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 4.5 H13 M5.5 4.5 V3.2 C5.5 2.5 6 2 6.7 2 H9.3 C10 2 10.5 2.5 10.5 3.2 V4.5 M4.5 4.5 L5 13 C5 13.6 5.5 14 6 14 H10 C10.5 14 11 13.6 11 13 L11.5 4.5"/>
+          </svg>
+          删除选中
+        </button>
+      </div>
+      <div class="va-right">
+        <button class="btn danger btn-icon-text" id="viewerDelSessionBtn" title="删除整个会话以及全部消息">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 4.5 H13 M5.5 4.5 V3.2 C5.5 2.5 6 2 6.7 2 H9.3 C10 2 10.5 2.5 10.5 3.2 V4.5 M4.5 4.5 L5 13 C5 13.6 5.5 14 6 14 H10 C10.5 14 11 13.6 11 13 L11.5 4.5"/>
+          </svg>
+          删除整个会话
+        </button>
+      </div>
     `;
     $('viewerResumeBtn').addEventListener('click', () => _viewerResume());
     $('viewerMultiBtn').addEventListener('click', () => _viewerToggleMulti());
@@ -3786,7 +4175,10 @@ function _renderViewerBody() {
 
 function _viewerToggleMulti() {
   _viewerMultiOn = !_viewerMultiOn;
-  $('viewerMultiBtn').textContent = _viewerMultiOn ? '✕ 退出多选' : '☑ 多选消息';
+  // textContent 会清掉 SVG，改用 innerHTML 整体重写
+  $('viewerMultiBtn').innerHTML = _viewerMultiOn
+    ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>退出多选'
+    : '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8 L7.3 9.8 L10.8 6"/></svg>多选消息';
   $('viewerBatchDelBtn').style.display = _viewerMultiOn ? '' : 'none';
   _renderViewerBody();
 }
@@ -3811,7 +4203,11 @@ async function _viewerBatchDelete() {
   _sessionTurnsCache.delete(_viewerSid);
   _viewerTurns = await _loadSessionTurns(_viewerSid, true);
   _viewerMultiOn = false;
-  $('viewerMultiBtn').textContent = '☑ 多选消息';
+  // 同样用 innerHTML 重写，保留 SVG icon
+  const mb = $('viewerMultiBtn');
+  if (mb) {
+    mb.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8 L7.3 9.8 L10.8 6"/></svg>多选消息';
+  }
   $('viewerBatchDelBtn').style.display = 'none';
   _renderViewerBody();
   refreshMemory();
@@ -3943,7 +4339,11 @@ $('sessionsMultiBtn').addEventListener('click', () => {
   const list = $('sessionList');
   const on = list.classList.toggle('sessions-multi-on');
   $('sessionsBatchDelBtn').style.display = on ? '' : 'none';
-  $('sessionsMultiBtn').textContent = on ? '✕ 退出多选' : '☑ 多选';
+  // 切换文字时连 SVG 一起重写，避免 textContent 把 icon 清掉
+  const btn = $('sessionsMultiBtn');
+  btn.innerHTML = on
+    ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>退出多选'
+    : '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8 L7.3 9.8 L10.8 6"/></svg>多选';
   if (!on) list.querySelectorAll('input[data-pick-session]').forEach(i => { i.checked = false; });
 });
 $('sessionsBatchDelBtn').addEventListener('click', async () => {
@@ -4559,8 +4959,8 @@ async function refreshCalendar() {
   grid.querySelectorAll('[data-day]').forEach(el => {
     el.addEventListener('click', () => selectDay(el.dataset.day));
   });
-
-  refreshAiProfile();
+  // AI 画像已迁到记忆管理页，不再随日历刷新；进入记忆管理页时
+  // 由 hashchange + bootstrap 兜底触发 refreshAiProfile。
 }
 
 async function selectDay(ymd) {
@@ -4637,25 +5037,68 @@ $('reSummarizeBtn').addEventListener('click', () => {
 });
 
 async function refreshAiProfile() {
+  const body = $('aiProfileBody');
+  if (!body) return;
   try {
     const p = await api('GET', '/api/ai-profile');
-    if (!p.description && (!p.traits || !p.traits.length)) {
-      $('aiProfileBody').innerHTML = '<div class="empty">还没有生成，点上方按钮试试</div>';
-      $('aiProfileMeta').textContent = '--';
+    const hasContent = !!(p.description) || (p.traits && p.traits.length) || (p.interests && p.interests.length);
+    if (!hasContent) {
+      body.innerHTML = `
+        <div class="ai-profile-empty">
+          <span class="ai-profile-spark">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 3 L10.9 7 L15 8 L10.9 9 L10 13 L9.1 9 L5 8 L9.1 7 Z"/>
+            </svg>
+          </span>
+          <div>多聊几句之后再回来，画像会自动出现在这里。</div>
+        </div>`;
+      const meta = $('aiProfileMeta');
+      if (meta) meta.textContent = '--';
       return;
     }
-    const traits = (p.traits || []).map(t => `<span class="badge muted" style="margin-right:4px">${escapeHtml(t)}</span>`).join('');
-    const interests = (p.interests || []).map(t => `<span class="badge ok" style="margin-right:4px">${escapeHtml(t)}</span>`).join('');
-    $('aiProfileBody').innerHTML = `
-      <div style="margin-bottom:10px; line-height:1.7;">${escapeHtml(p.description || '')}</div>
-      <div style="margin-bottom:6px;"><span class="small">性格：</span>${traits || '<span class="small">--</span>'}</div>
-      <div><span class="small">兴趣：</span>${interests || '<span class="small">--</span>'}</div>
+    const traitsHtml = (p.traits || [])
+      .map(t => `<span class="ai-profile-chip trait">${escapeHtml(t)}</span>`).join('');
+    const interestsHtml = (p.interests || [])
+      .map(t => `<span class="ai-profile-chip interest">${escapeHtml(t)}</span>`).join('');
+    const tracks = [];
+    if (traitsHtml) {
+      tracks.push(`
+        <div class="ai-profile-track">
+          <div class="ai-profile-track-label">性格</div>
+          <div class="ai-profile-chips">${traitsHtml}</div>
+        </div>
+      `);
+    }
+    if (interestsHtml) {
+      tracks.push(`
+        <div class="ai-profile-track">
+          <div class="ai-profile-track-label">兴趣</div>
+          <div class="ai-profile-chips">${interestsHtml}</div>
+        </div>
+      `);
+    }
+    body.innerHTML = `
+      ${p.description ? `<p class="ai-profile-narration">${escapeHtml(p.description)}</p>` : ''}
+      ${tracks.length ? `<div class="ai-profile-tracks">${tracks.join('')}</div>` : ''}
     `;
-    $('aiProfileMeta').textContent = p.updated_at ? '更新于 ' + new Date(p.updated_at*1000).toLocaleString() : '--';
+    const meta = $('aiProfileMeta');
+    if (meta) {
+      meta.textContent = p.updated_at
+        ? '更新于 ' + new Date(p.updated_at*1000).toLocaleString()
+        : '--';
+    }
   } catch {}
 }
 $('refreshAiProfileBtn').addEventListener('click', async () => {
-  $('aiProfileBody').innerHTML = '<div class="empty">总结中…（可能需要 30 秒）</div>';
+  $('aiProfileBody').innerHTML = `
+    <div class="ai-profile-empty">
+      <span class="ai-profile-spark">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 3 L10.9 7 L15 8 L10.9 9 L10 13 L9.1 9 L5 8 L9.1 7 Z"/>
+        </svg>
+      </span>
+      <div>正在重新生成主人画像，可能需要 30 秒…</div>
+    </div>`;
   try {
     await api('POST', '/api/ai-profile/refresh');
     toast('已重新生成');
@@ -5445,6 +5888,16 @@ async function bootstrap() {
   refreshTopbarPet();
   refreshChatHero();
   loadGreeting();
+  // 用户首次进来或刷新页面时如果已经停在 #memory，hashchange 不会触发，
+  // 这里兜底拉一次会话流水 + AI 画像，免得用户看到空状态。
+  if ((location.hash.slice(1) || 'profile') === 'memory') {
+    if (typeof refreshSessions === 'function') refreshSessions({ append: false });
+    if (typeof refreshAiProfile === 'function') refreshAiProfile();
+  }
+  // bootstrap 兜底：无论当前在哪一页都先拉一次 AI 画像（因为 hashchange
+  // 进入 calendar 页时不再调，refreshAiProfile 不会被自动触发）。这样
+  // 用户切到记忆管理那一刻就能看到画像，不用等 hashchange。
+  if (typeof refreshAiProfile === 'function') refreshAiProfile();
 
   // 切换到账户页时强制刷一次（可能用户改完后切回来）
   window.addEventListener('hashchange', () => {

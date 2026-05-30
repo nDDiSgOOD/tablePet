@@ -134,7 +134,20 @@ def get_pet_state(user_id: str) -> dict[str, Any]:
             (user_id,),
         ).fetchone()
     state = dict(row)
-    days = max(0, int((time.time() - (state["since_ts"] or time.time())) // 86400))
+    # "已陪伴 N 天" —— 用日历日跨度而不是 86400 整除。
+    # 老逻辑 (now - since_ts) // 86400 在不满 24h 时为 0，会让用户
+    # 第一天打开 dashboard 永远看到 "0 天"，违反中文常识（首日 = 第 1 天）。
+    # 现在按本地日期跨度算：首次创建当天 = 第 1 天，明天 = 第 2 天，依此类推。
+    since_ts = float(state.get("since_ts") or time.time())
+    try:
+        since_date = time.localtime(since_ts)
+        today_date = time.localtime(time.time())
+        # struct_time → date ordinal（年 * 366 + yday 粗算就够）
+        since_ord = since_date.tm_year * 366 + since_date.tm_yday
+        today_ord = today_date.tm_year * 366 + today_date.tm_yday
+        days = max(1, today_ord - since_ord + 1)
+    except (TypeError, ValueError):
+        days = 1
     state["days"] = days
     return state
 
