@@ -1867,6 +1867,24 @@
     .acct-form .field.full { grid-column:1 / -1; }
     .acct-form .field-label { font-size:var(--fs-sm); color:var(--muted); font-weight:500; }
     .acct-form input, .acct-form select { padding:10px var(--s-3); }
+    /* API Key 下方的"探测中 / 拿到 N 个 / 失败"提示行 */
+    .acct-form .field-hint {
+      font-size:var(--fs-xs);
+      color:var(--muted);
+      min-height:14px;
+      transition:color var(--t-fast) var(--ease-out);
+    }
+    .acct-form .field-hint.is-ok   { color:var(--ok); }
+    .acct-form .field-hint.is-err  { color:var(--bad); }
+    .acct-form .field-hint.is-loading::before {
+      content:""; display:inline-block; width:8px; height:8px;
+      border-radius:50%; background:var(--accent);
+      margin-right:6px; vertical-align:1px;
+      animation:hint-pulse 1.2s var(--ease-out) infinite;
+    }
+    @keyframes hint-pulse {
+      0%,100% { opacity:0.35 } 50% { opacity:1 }
+    }
     .acct-form-actions {
       display:flex; gap:10px; justify-content:flex-end; margin-top:6px;
       padding-top:14px;
@@ -2573,15 +2591,17 @@
             <div class="field full">
               <span class="field-label">API Key</span>
               <input name="api_key" placeholder="sk-..." autocomplete="off">
+              <span class="field-hint" id="acctProbeHint" aria-live="polite"></span>
             </div>
 
+            <datalist id="acctModelList"></datalist>
             <div class="field">
               <span class="field-label">主对话模型</span>
-              <input name="chat_model" placeholder="比如：deepseek-chat">
+              <input name="chat_model" list="acctModelList" placeholder="比如：deepseek-chat" autocomplete="off">
             </div>
             <div class="field">
               <span class="field-label">总结模型（便宜一点）</span>
-              <input name="summary_model" placeholder="比如：deepseek-chat">
+              <input name="summary_model" list="acctModelList" placeholder="比如：deepseek-chat" autocomplete="off">
             </div>
 
             <div class="field full acct-form-actions">
@@ -4651,11 +4671,87 @@ function startAcctEdit(a) {
     f.elements['chat_model'].value = 'deepseek-chat';
     f.elements['summary_model'].value = 'deepseek-chat';
   }
+  // 切换账号时清空上一次拉到的模型清单 + 提示
+  _setProbeHint('', '');
+  _renderModelDatalist([]);
+  // 编辑已存在账号时，base_url + api_key 都齐全，立刻触发一次探测
+  if (a && a.base_url && a.api_key) {
+    _probeModelsDebounced();
+  }
   _switchAcctTab('form');
   // 切到表单 tab 后滚到表单
   const pane = document.querySelector('[data-pane="form"]');
   if (pane) pane.scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
+
+/* =====================================================================
+   模型清单探测：base_url + api_key 都填了之后，debounce 500ms 调
+   POST /api/llm/probe-models 拿当前 provider 实际开放的模型，写入
+   <datalist id="acctModelList">，让 chat_model / summary_model 两个
+   input 自动出下拉建议。后端 5min 缓存 + 同 key 反复探也不会反复打 provider。
+   provider 不支持标准 spec（Anthropic / Gemini 等）时显示失败提示，用户
+   继续手填即可（按用户取舍：不做内置兜底清单）。
+   ===================================================================== */
+let _probeTimer = null;
+let _probeAbortKey = '';   // 记录"最后一次发起的请求"的 key，避免老请求覆盖新结果
+function _setProbeHint(text, kind /* '' | 'ok' | 'err' | 'loading' */) {
+  const el = $('acctProbeHint');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'field-hint' + (kind ? ` is-${kind}` : '');
+}
+function _renderModelDatalist(models) {
+  const dl = $('acctModelList');
+  if (!dl) return;
+  dl.innerHTML = (models || [])
+    .map(m => `<option value="${escapeHtml(m)}"></option>`)
+    .join('');
+}
+async function _probeModelsNow() {
+  const f = $('acctForm');
+  if (!f) return;
+  const base_url = (f.elements['base_url'].value || '').trim();
+  const api_key  = (f.elements['api_key'].value  || '').trim();
+  if (!base_url || !api_key) {
+    _setProbeHint('', '');
+    _renderModelDatalist([]);
+    return;
+  }
+  const myKey = `${base_url}::${api_key.slice(-8)}`;
+  _probeAbortKey = myKey;
+  _setProbeHint('正在向 provider 拉模型清单…', 'loading');
+  try {
+    const r = await api('POST', '/api/llm/probe-models', { base_url, api_key });
+    // 用户在这次请求飞回来之前又改了输入 → 丢弃这次结果
+    if (_probeAbortKey !== myKey) return;
+    if (r && r.ok && Array.isArray(r.models) && r.models.length) {
+      _renderModelDatalist(r.models);
+      _setProbeHint(
+        `已拉到 ${r.models.length} 个可用模型${r.cached ? '（缓存）' : ''}，下方输入框点一下即可下拉选择`,
+        'ok',
+      );
+    } else {
+      _renderModelDatalist([]);
+      _setProbeHint(r && r.error ? r.error : '探测失败，请手填模型名', 'err');
+    }
+  } catch (err) {
+    if (_probeAbortKey !== myKey) return;
+    _renderModelDatalist([]);
+    _setProbeHint('探测失败：' + (err.message || err) + '。请手填模型名', 'err');
+  }
+}
+function _probeModelsDebounced() {
+  if (_probeTimer) clearTimeout(_probeTimer);
+  _probeTimer = setTimeout(_probeModelsNow, 500);
+}
+// API Key 或 Base URL 变了就重新探测
+['api_key', 'base_url'].forEach(name => {
+  const el = $('acctForm').elements[name];
+  if (el) {
+    el.addEventListener('input', _probeModelsDebounced);
+    el.addEventListener('change', _probeModelsDebounced);
+  }
+});
 
 $$('.acct-tabs .tab').forEach(el => el.addEventListener('click', () => {
   if (el.dataset.acctTab === 'form' && _acctEditingId == null) {
