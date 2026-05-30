@@ -977,20 +977,25 @@
     }
     .session-head .badges { display:flex; gap:var(--s-1); }
 
-    /* 会话概要：去掉 📝 emoji + 斜体，改为干净文字 + 内嵌 4px 暖色块（不是
-       border-left anti-pattern，而是 background-image，独立可控） */
+    /* 会话概要：完整展示，不做行数截断。
+     *
+     * 历史教训：之前加了 -webkit-line-clamp:2 + overflow:hidden，
+     * 配合中文 line-height 1.55 和紧凑 padding，descender（"了/的/那"
+     * 的下半部分）落在行盒之外被 hidden 整体砍掉，用户只能看到字的
+     * 上半身。
+     *
+     * summary 是会话的核心信息，截掉就失去意义。改成完整展示，外层
+     * sessionList 已经在管滚动，长 summary 撑高单卡也不会爆屏。
+     */
     .session-summary {
-      padding:8px var(--s-4) 10px;
+      padding:10px var(--s-4) 12px;
       font-size:var(--fs-sm);
       color:var(--text-soft);
-      line-height:1.55;
+      line-height:1.6;
       border-top:1px solid var(--line-soft);
       background:color-mix(in oklch, var(--panel-2) 85%, transparent);
-      display:-webkit-box;
-      -webkit-line-clamp:2;
-      line-clamp:2;
-      -webkit-box-orient:vertical;
-      overflow:hidden;
+      white-space:normal;
+      overflow-wrap:anywhere;
     }
 
     .session-actions {
