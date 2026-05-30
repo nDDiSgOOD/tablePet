@@ -93,6 +93,39 @@ class MemoryContext:
         """折叠成一段 system 文本，用作 prompt 上半部分."""
         sections: list[str] = []
 
+        # 【你的当前身份】放最前面，是 LLM 自我认同的真理来源。
+        # 改名时路由会切换新 session（见 api_put_pet_status），所以这里
+        # 不再需要"忽略历史里的旧名字"那种硬声明 —— ephemeral_turns
+        # 在新 session 下就是干净的。
+        ps = self.pet_state
+        if ps:
+            pet_name = ps.get("name") or "小桌"
+            persona  = ps.get("persona")  or ""
+            tagline  = ps.get("tagline")  or ""
+            identity_lines = [
+                f"你叫「{pet_name}」。这是主人最新设定。",
+            ]
+            if persona:
+                identity_lines.append(f"人设：{persona}")
+            if tagline:
+                identity_lines.append(f"口头禅：{tagline}（自然出现，不要每句都说）")
+            identity_lines.append(
+                f"当前心情 {ps.get('mood', 'neutral')}（{ps.get('mood_score', 60)}/100），"
+                f"活力 {ps.get('energy', 70)}/100，等级 Lv.{ps.get('level', 1)}"
+            )
+            if ps.get("ai_notes"):
+                identity_lines.append(f"AI 主观感受：{ps['ai_notes']}")
+            if ps.get("updated_at"):
+                try:
+                    ts = float(ps["updated_at"])
+                    if ts > 0:
+                        identity_lines.append(
+                            "（你的设定最近一次修改：" + _humanize_ts(ts) + "）"
+                        )
+                except (TypeError, ValueError):
+                    pass
+            sections.append("【你的当前身份】\n" + "\n".join(f"- {l}" for l in identity_lines))
+
         # 用户画像（用户填 + AI 总结）
         u = self.user_profile or {}
         ai = self.ai_profile or {}
@@ -126,32 +159,8 @@ class MemoryContext:
         if profile_lines:
             sections.append("【用户画像】\n" + "\n".join(f"- {l}" for l in profile_lines))
 
-        # 宠物状态
-        ps = self.pet_state
-        if ps:
-            pet_lines = [
-                f"名字：{ps.get('name', '小桌')}",
-            ]
-            if ps.get("persona"):
-                pet_lines.append(f"人设：{ps['persona']}")
-            if ps.get("tagline"):
-                pet_lines.append(f"口头禅：{ps['tagline']}")
-            pet_lines.append(
-                f"心情 {ps.get('mood', 'neutral')}（{ps.get('mood_score', 60)}/100），"
-                f"活力 {ps.get('energy', 70)}/100，等级 Lv.{ps.get('level', 1)}"
-            )
-            if ps.get("ai_notes"):
-                pet_lines.append(f"AI 主观感受：{ps['ai_notes']}")
-            if ps.get("updated_at"):
-                try:
-                    ts = float(ps["updated_at"])
-                    if ts > 0:
-                        pet_lines.append(
-                            "（你的设定最近一次修改：" + _humanize_ts(ts) + "）"
-                        )
-                except (TypeError, ValueError):
-                    pass
-            sections.append("【你的当前状态】\n" + "\n".join(f"- {l}" for l in pet_lines))
+        # 宠物状态在最顶部已注入【你的当前身份】，这里不再重复输出，
+        # 避免 LLM 被同一段信息出现两次混淆。
 
         # 长期画像断言
         if self.facts:
