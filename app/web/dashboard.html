@@ -2559,12 +2559,44 @@
       <div class="page-sub">所有通道（web / wifi / usb）共享同一份记忆。</div>
 
       <div class="grid grid-2">
-        <div class="panel">
-          <div class="panel-title">长期画像（profile facts）</div>
-          <div class="memory-list compact" id="profileList"><div class="empty">暂无记忆</div></div>
-          <div class="memory-add">
-            <input id="newMemory" placeholder="比如：我喜欢喝拿铁">
-            <button class="btn primary" id="addMemoryBtn">添加</button>
+        <!-- 主人画像 —— 桌宠根据对话内容自动总结的画像。
+             从'宠物日记'页迁过来，替代原来的'长期画像（profile facts）'位置。
+             profile facts 已挪到用户简介页（参考用户登记，更对路）。
+             接口仍是 GET /api/ai-profile / POST /api/ai-profile/refresh。 -->
+        <div class="panel ai-profile-card">
+          <div class="ai-profile-head">
+            <div>
+              <span class="ai-profile-title">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                     stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10 3 L10.9 7 L15 8 L10.9 9 L10 13 L9.1 9 L5 8 L9.1 7 Z"/>
+                  <path d="M15 13 L15.5 14.7 L17 15 L15.5 15.3 L15 17 L14.5 15.3 L13 15 L14.5 14.7 Z"
+                        opacity="0.65"/>
+                </svg>
+                主人画像
+              </span>
+              <span class="ai-profile-title-sub">桌宠根据你说的话不断总结的形象</span>
+            </div>
+            <div class="ai-profile-meta">
+              <span class="small" id="aiProfileMeta">--</span>
+              <button class="btn btn-icon-text" id="refreshAiProfileBtn" title="重新生成主人画像">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2.5 8 A5.5 5.5 0 0 1 13.5 8 M13.5 8 V5 M13.5 8 H10.5"/>
+                  <path d="M13.5 8 A5.5 5.5 0 0 1 2.5 8 M2.5 8 V11 M2.5 8 H5.5"/>
+                </svg>
+                重新生成
+              </button>
+            </div>
+          </div>
+          <div id="aiProfileBody" class="ai-profile-body">
+            <div class="ai-profile-empty">
+              <span class="ai-profile-spark">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10 3 L10.9 7 L15 8 L10.9 9 L10 13 L9.1 9 L5 8 L9.1 7 Z"/>
+                </svg>
+              </span>
+              <div>多聊几句之后再回来，画像会自动出现在这里。</div>
+            </div>
           </div>
         </div>
 
@@ -2642,15 +2674,6 @@
           </div>
           <div id="dayBody" class="empty">点击左侧日期查看日记</div>
         </div>
-      </div>
-
-      <div class="panel" style="margin-top:14px;">
-        <div class="panel-title">AI 维护的用户画像</div>
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-          <button class="btn" id="refreshAiProfileBtn">🔄 重新生成</button>
-          <span class="small" id="aiProfileMeta">--</span>
-        </div>
-        <div id="aiProfileBody" class="empty">还没有生成</div>
       </div>
     </section>
 
@@ -4860,25 +4883,64 @@ $('reSummarizeBtn').addEventListener('click', () => {
 });
 
 async function refreshAiProfile() {
+  const body = $('aiProfileBody');
+  if (!body) return;
   try {
     const p = await api('GET', '/api/ai-profile');
-    if (!p.description && (!p.traits || !p.traits.length)) {
-      $('aiProfileBody').innerHTML = '<div class="empty">还没有生成，点上方按钮试试</div>';
-      $('aiProfileMeta').textContent = '--';
+    const hasContent = !!(p.description) || (p.traits && p.traits.length) || (p.interests && p.interests.length);
+    if (!hasContent) {
+      body.innerHTML = `
+        <div class="ai-profile-empty">
+          <span class="ai-profile-spark">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 3 L10.9 7 L15 8 L10.9 9 L10 13 L9.1 9 L5 8 L9.1 7 Z"/>
+            </svg>
+          </span>
+          <div>多聊几句之后再回来，画像会自动出现在这里。</div>
+        </div>`;
+      const meta = $('aiProfileMeta');
+      if (meta) meta.textContent = '--';
       return;
     }
-    const traits = (p.traits || []).map(t => `<span class="badge muted" style="margin-right:4px">${escapeHtml(t)}</span>`).join('');
-    const interests = (p.interests || []).map(t => `<span class="badge ok" style="margin-right:4px">${escapeHtml(t)}</span>`).join('');
-    $('aiProfileBody').innerHTML = `
-      <div style="margin-bottom:10px; line-height:1.7;">${escapeHtml(p.description || '')}</div>
-      <div style="margin-bottom:6px;"><span class="small">性格：</span>${traits || '<span class="small">--</span>'}</div>
-      <div><span class="small">兴趣：</span>${interests || '<span class="small">--</span>'}</div>
+    const traitsHtml = (p.traits || [])
+      .map(t => `<span class="ai-profile-chip trait">${escapeHtml(t)}</span>`).join('');
+    const interestsHtml = (p.interests || [])
+      .map(t => `<span class="ai-profile-chip interest">${escapeHtml(t)}</span>`).join('');
+    const tracks = [];
+    if (traitsHtml) {
+      tracks.push(`
+        <div class="ai-profile-track-label">性格</div>
+        <div class="ai-profile-chips">${traitsHtml}</div>
+      `);
+    }
+    if (interestsHtml) {
+      tracks.push(`
+        <div class="ai-profile-track-label">兴趣</div>
+        <div class="ai-profile-chips">${interestsHtml}</div>
+      `);
+    }
+    body.innerHTML = `
+      ${p.description ? `<p class="ai-profile-narration">${escapeHtml(p.description)}</p>` : ''}
+      ${tracks.length ? `<div class="ai-profile-tracks">${tracks.join('')}</div>` : ''}
     `;
-    $('aiProfileMeta').textContent = p.updated_at ? '更新于 ' + new Date(p.updated_at*1000).toLocaleString() : '--';
+    const meta = $('aiProfileMeta');
+    if (meta) {
+      meta.textContent = p.updated_at
+        ? '更新于 ' + new Date(p.updated_at*1000).toLocaleString()
+        : '--';
+    }
   } catch {}
 }
 $('refreshAiProfileBtn').addEventListener('click', async () => {
-  $('aiProfileBody').innerHTML = '<div class="empty">总结中…（可能需要 30 秒）</div>';
+  $('aiProfileBody').innerHTML = `
+    <div class="ai-profile-empty">
+      <span class="ai-profile-spark">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 3 L10.9 7 L15 8 L10.9 9 L10 13 L9.1 9 L5 8 L9.1 7 Z"/>
+        </svg>
+      </span>
+      <div>正在重新生成主人画像，可能需要 30 秒…</div>
+    </div>`;
   try {
     await api('POST', '/api/ai-profile/refresh');
     toast('已重新生成');
