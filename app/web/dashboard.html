@@ -2095,10 +2095,6 @@
           <span class="label">人格</span>
           <span class="val" id="topbarPersonaName">--</span>
         </div>
-        <div class="topbar-chip is-balance clickable" id="topbarBalance" title="点击进入账户管理">
-          <span class="label">余额</span>
-          <span class="val" id="topbarBalanceVal">--</span>
-        </div>
       </div>
       <button id="themeToggle" type="button" aria-label="切换亮色 / 暗色主题" title="切换亮色 / 暗色">
         <svg class="icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -2586,19 +2582,6 @@
             <div class="field">
               <span class="field-label">总结模型（便宜一点）</span>
               <input name="summary_model" placeholder="比如：deepseek-chat">
-            </div>
-
-            <div class="field">
-              <span class="field-label">余额（手动录入）</span>
-              <input name="balance" type="number" step="0.01" placeholder="0.00">
-            </div>
-            <div class="field">
-              <span class="field-label">币种</span>
-              <select name="balance_currency">
-                <option value="CNY">CNY ¥</option>
-                <option value="USD">USD $</option>
-                <option value="EUR">EUR €</option>
-              </select>
             </div>
 
             <div class="field full acct-form-actions">
@@ -4560,7 +4543,6 @@ function _renderAcctCard(a) {
         <div class="balance">${escapeHtml(balCurEff)} ${escapeHtml(balVal)} ${balTag}</div>
         <div class="actions">
           ${isActive ? '' : `<button class="btn primary" data-act-activate="${a.id}">设为生效</button>`}
-          <button class="btn" data-act-refresh="${a.id}" title="向 provider 实时查询余额">🔄 余额</button>
           <button class="btn" data-act-edit="${a.id}">编辑</button>
           <button class="btn danger" data-act-delete="${a.id}">删除</button>
         </div>
@@ -4613,33 +4595,6 @@ function _renderAcctList() {
     const a = _acctAccum.find(x => x.id === id);
     if (a) startAcctEdit(a);
   }));
-  box.querySelectorAll('[data-act-refresh]').forEach(b => b.addEventListener('click', async () => {
-    const id = parseInt(b.dataset.actRefresh, 10);
-    const oldText = b.textContent;
-    b.textContent = '查询中…';
-    b.disabled = true;
-    try {
-      const r = await api('POST', `/api/llm/accounts/${id}/refresh-balance`);
-      if (r.balance != null && r.balance_source === 'remote') {
-        _liveBalance.set(id, { balance: r.balance, balance_currency: r.balance_currency, balance_source: 'remote' });
-        toast('已查到实时余额');
-      } else if (r.balance != null) {
-        _liveBalance.delete(id);
-        toast(`provider 接口未返回，使用本地录入值`);
-      } else {
-        _liveBalance.delete(id);
-        toast('provider 不支持余额查询，可在编辑里手填', 'error');
-      }
-      _renderAcctHero();
-      _renderAcctList();
-      refreshFooterBar();
-    } catch (e) {
-      toast('查询失败：' + e.message, 'error');
-    } finally {
-      b.textContent = oldText;
-      b.disabled = false;
-    }
-  }));
   box.querySelectorAll('[data-act-delete]').forEach(b => b.addEventListener('click', async () => {
     const id = b.dataset.actDelete;
     const a = _acctAccum.find(x => String(x.id) === String(id));
@@ -4678,15 +4633,12 @@ function startAcctEdit(a) {
     f.elements['api_key'].value  = a.api_key || '';
     f.elements['chat_model'].value    = a.chat_model || '';
     f.elements['summary_model'].value = a.summary_model || '';
-    f.elements['balance'].value = a.balance ?? '';
-    f.elements['balance_currency'].value = a.balance_currency || 'CNY';
   } else {
     f.reset();
     f.elements['provider'].value = 'deepseek';
     f.elements['base_url'].value = 'https://api.deepseek.com';
     f.elements['chat_model'].value = 'deepseek-chat';
     f.elements['summary_model'].value = 'deepseek-chat';
-    f.elements['balance_currency'].value = 'CNY';
   }
   _switchAcctTab('form');
   // 切到表单 tab 后滚到表单
@@ -4738,6 +4690,9 @@ $('acctFormReset').addEventListener('click', () => {
 $('acctForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
+  // 余额 / 币种已交给 provider 实时查询，前端不再录入；
+  // 后端 upsert_account 看到字段缺失会回退到默认值（balance=0、CNY），
+  // 不影响真实显示——显示永远走 _balance_for() 拉远程。
   const data = {
     provider: fd.get('provider') || 'deepseek',
     label: fd.get('label') || '',
@@ -4745,8 +4700,6 @@ $('acctForm').addEventListener('submit', async (e) => {
     api_key: fd.get('api_key') || '',
     chat_model: fd.get('chat_model') || '',
     summary_model: fd.get('summary_model') || '',
-    balance: parseFloat(fd.get('balance')) || 0,
-    balance_currency: fd.get('balance_currency') || 'CNY',
   };
   if (!data.api_key.trim()) {
     toast('API Key 不能为空', 'error');
@@ -4765,6 +4718,10 @@ $('acctForm').addEventListener('submit', async (e) => {
   $('acctEditCancel').style.display = 'none';
   $('acctForm').reset();
   _switchAcctTab('trend');
+  // 保存账号后立刻刷一次余额（refreshAccounts 内部会对 active 账号
+  // 调 /api/llm/active → 后端走远程查询；refreshFooterBar 调
+  // /api/usage/today 也会顺手返回最新远程余额）。这样用户保存完不用
+  // 再手点任何按钮就能看到实时余额。
   refreshAccounts();
   refreshFooterBar();
 });
@@ -4924,31 +4881,14 @@ async function refreshFooterBar() {
     const link = $('footerOpenAccount');
     link.textContent = t.configured ? '前往账户管理 →' : '⚠ 去配置 LLM 账号 →';
     link.classList.toggle('warn', !t.configured);
-
-    // 同步 topbar 余额 chip
-    const tbBal = $('topbarBalanceVal');
-    const tbBalChip = $('topbarBalance');
-    if (tbBal && tbBalChip) {
-      if (t.balance != null) {
-        tbBal.textContent = `${t.balance_currency || ''} ${Number(t.balance).toFixed(2)}`;
-        tbBalChip.classList.toggle('is-warn', !t.configured || Number(t.balance) <= 0);
-      } else {
-        tbBal.textContent = '未配置';
-        tbBalChip.classList.add('is-warn');
-      }
-    }
   } catch {
     $('footerTokens').textContent  = '--';
     $('footerCalls').textContent   = '--';
     $('footerBalance').textContent = '--';
-    const tbBal = $('topbarBalanceVal');
-    if (tbBal) tbBal.textContent = '--';
   }
 }
 $('footerOpenAccount').addEventListener('click', () => { location.hash = '#account'; });
 // topbar chip 跳转 / 触发交互
-const _topbarBalanceEl = document.getElementById('topbarBalance');
-if (_topbarBalanceEl) _topbarBalanceEl.addEventListener('click', () => { location.hash = '#account'; });
 const _topbarPetEl = document.getElementById('topbarPet');
 if (_topbarPetEl) _topbarPetEl.addEventListener('click', () => { location.hash = '#pet'; });
 // topbar 人格 chip：先跳到对话页（popover anchor 在那），再开 popover

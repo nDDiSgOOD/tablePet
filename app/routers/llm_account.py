@@ -159,9 +159,19 @@ async def api_create_account(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.put("/api/llm/accounts/{account_id}")
 async def api_update_account(account_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-    if not get_account(DEFAULT_USER_ID, account_id):
+    existing = get_account(DEFAULT_USER_ID, account_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="account not found")
-    upsert_account(DEFAULT_USER_ID, payload, account_id=account_id)
+    # 余额 / 币种现在完全由 provider 远程查询，前端不再录入。如果调用方
+    # 没传这两个字段，保持数据库旧值不动，避免误把老用户手填过的兜底值
+    # 覆盖成 0（虽然显示不依赖它，但 _balance_for 在 provider 拿不到时
+    # 会用它做 fallback，写成 0 会让 fallback 跌成 "0 元"）。
+    merged = {**payload}
+    if "balance" not in merged and existing.get("balance") is not None:
+        merged["balance"] = existing["balance"]
+    if "balance_currency" not in merged and existing.get("balance_currency"):
+        merged["balance_currency"] = existing["balance_currency"]
+    upsert_account(DEFAULT_USER_ID, merged, account_id=account_id)
     _invalidate_balance_cache(account_id)
     return {"ok": True}
 
