@@ -24,9 +24,10 @@ from ..config import (
     USB_VISION_JPEG,
     USB_VISION_JSON,
 )
-from ..schemas import ChatRequest, TtsRequest
+from ..agent import AgentInput, Channel, run_agent
+from ..memory import DEFAULT_USER_ID
+from ..schemas import TtsRequest
 from ..services.asr import process_asr_wav
-from ..services.chat import process_chat
 from ..services.tts import generate_tts_wav
 from ..services.vision import process_vision_jpeg
 from ..utils.adpcm import adpcm_to_wav
@@ -71,9 +72,22 @@ async def handle_usb_frame(msg_type: int, payload: bytes) -> tuple[int | None, b
 
     if msg_type == USB_CHAT_JSON:
         data = usb_decode_json(payload)
-        data.setdefault("device_id", device_id)
-        result = await process_chat(ChatRequest(**data), "usb")
-        return USB_CHAT_JSON_RESP, usb_json_bytes(result)
+        result = await run_agent(
+            AgentInput(
+                channel=Channel.USB,
+                device_id=str(data.get("device_id") or device_id),
+                # 单用户系统：忽略设备 payload 里的 user_id，统一用 DEFAULT_USER_ID。
+                user_id=DEFAULT_USER_ID,
+                text=str(data.get("text") or ""),
+                want_tts=False,
+                extra={
+                    "vision": data.get("vision", ""),
+                    "source": "device_voice",
+                    "transport": "usb",
+                },
+            )
+        )
+        return USB_CHAT_JSON_RESP, usb_json_bytes({"reply": result.reply or ""})
 
     if msg_type == USB_TTS_JSON:
         data = usb_decode_json(payload)

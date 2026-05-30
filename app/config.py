@@ -32,28 +32,90 @@ for directory in (CACHE_DIR, AUDIO_DIR, MUSIC_CACHE_DIR, MEDIA_DIR, JAY_CHOU_DIR
     directory.mkdir(parents=True, exist_ok=True)
 
 
+def _load_dotenv_file(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv_file(APP_DIR / ".env")
+
+
 # ---------------------------------------------------------------------------
-# 固件 main.cpp 中嵌入的 DeepSeek key（兼容老 demo）
+# 固件 main.cpp 中嵌入的 DeepSeek key（兼容老 demo）—— 已废弃
 # ---------------------------------------------------------------------------
 def _load_firmware_deepseek_key() -> str:
-    firmware_path = APP_DIR.parent / "src" / "main.cpp"
-    try:
-        text = firmware_path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    match = re.search(r'DEEPSEEK_API_KEY\s*=\s*"([^"]+)"', text)
-    if not match:
-        return ""
-    key = match.group(1).strip()
-    return "" if key.startswith("YOUR_") else key
+    """老逻辑会从 src/main.cpp 提取 DEEPSEEK_API_KEY；现在改为前端账户页配置，
+    所以这里固定返回空字符串，避免误触发任何 fallback。
+    """
+    return ""
 
 
 # ---------------------------------------------------------------------------
 # DeepSeek
 # ---------------------------------------------------------------------------
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "") or _load_firmware_deepseek_key()
+# ⚠️ 重要：API Key 不再从环境变量 / 固件文件读取。所有调用必须走「账户情况」页面
+#         配置的账号（SQLite ``llm_account`` 表）。env 里的 DEEPSEEK_API_KEY 即使
+#         设置了也会被忽略，避免泄露 / 误用。
+DEEPSEEK_API_KEY = ""
 DEEPSEEK_URL = os.getenv("DEEPSEEK_URL", "https://api.deepseek.com/chat/completions")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+# 主对话模型 vs 总结模型分开配置 / Chat model vs summarization model separation.
+# 总结类任务（短期/长期/AI 画像/宠物状态）一律走更便宜的模型，避免烧钱。
+DEEPSEEK_CHAT_MODEL = os.getenv("DEEPSEEK_CHAT_MODEL", DEEPSEEK_MODEL)
+DEEPSEEK_SUMMARY_MODEL = os.getenv("DEEPSEEK_SUMMARY_MODEL", "deepseek-chat")
+
+
+# ---------------------------------------------------------------------------
+# 记忆体系 / Memory system
+# ---------------------------------------------------------------------------
+# 上下文 token 预算
+# - deepseek-v4 上下文 ~128k tokens
+# - 60k 触发总结，给 prompt 附加内容 + 输出留 50% 余裕
+MEMORY_CONTEXT_BUDGET_TOKENS = int(
+    os.getenv("TABLEPET_CONTEXT_BUDGET_TOKENS", str(60_000))
+)
+# 临时记忆窗口（小时）
+MEMORY_EPHEMERAL_WINDOW_HOURS = int(os.getenv("TABLEPET_EPHEMERAL_HOURS", "24"))
+# 长期记忆召回 topK
+MEMORY_LONG_TERM_TOPK = int(os.getenv("TABLEPET_LONG_TERM_TOPK", "5"))
+# 短期记忆 prompt 注入条数上限
+MEMORY_SHORT_TERM_INJECT_MAX = int(os.getenv("TABLEPET_SHORT_TERM_INJECT_MAX", "8"))
+
+# tiktoken 编码器：deepseek 与 GPT 系列 token 切分相近，用 cl100k_base 估计
+MEMORY_TOKEN_ENCODING = os.getenv("TABLEPET_TOKEN_ENCODING", "cl100k_base")
+
+
+# ---------------------------------------------------------------------------
+# 向量嵌入 / Embedding (Ollama)
+# ---------------------------------------------------------------------------
+OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_EMBED_MODEL = os.getenv("TABLEPET_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_EMBED_TIMEOUT_SECONDS = int(os.getenv("TABLEPET_EMBED_TIMEOUT", "30"))
+
+
+# ---------------------------------------------------------------------------
+# APScheduler 后台任务
+# ---------------------------------------------------------------------------
+SCHEDULER_ENABLED = os.getenv("TABLEPET_SCHEDULER_ENABLED", "1") == "1"
+# 每天几点跑日记总结（24h）
+SCHEDULER_DAILY_SUMMARY_HOUR = int(os.getenv("TABLEPET_DAILY_SUMMARY_HOUR", "3"))
+SCHEDULER_DAILY_SUMMARY_MINUTE = int(os.getenv("TABLEPET_DAILY_SUMMARY_MINUTE", "30"))
+# 宠物状态多久重算一次（分钟）
+SCHEDULER_PET_TICK_MINUTES = int(os.getenv("TABLEPET_PET_TICK_MINUTES", "60"))
 
 
 # ---------------------------------------------------------------------------
@@ -73,10 +135,13 @@ ASR_STRONG_RETRY_MIN_RMS = float(os.getenv("TABLEPET_ASR_STRONG_RETRY_MIN_RMS", 
 # TTS
 # ---------------------------------------------------------------------------
 DEFAULT_VOICE = os.getenv("TABLEPET_TTS_VOICE", "zh-TW-HsiaoChenNeural")
+TTS_ENGINE = os.getenv("TABLEPET_TTS_ENGINE", "edge").strip().lower()
 TTS_EDGE_ENABLED = os.getenv("TABLEPET_TTS_EDGE_ENABLED", "0") == "1"
 TTS_EDGE_RETRY_SECONDS = int(os.getenv("TABLEPET_TTS_EDGE_RETRY_SECONDS", "20"))
 TTS_CUTE_FILTER_ENABLED = os.getenv("TABLEPET_TTS_CUTE_FILTER_ENABLED", "0") == "1"
 MACOS_SAY_VOICE = os.getenv("TABLEPET_MACOS_SAY_VOICE", "Flo (Chinese (China mainland))")
+MLX_TTS_MODEL = os.getenv("TABLEPET_MLX_TTS_MODEL", "")
+MLX_TTS_COMMAND = os.getenv("TABLEPET_MLX_TTS_COMMAND", "")
 
 VOICE_PRESETS: dict[str, dict[str, str]] = {
     "fast": {
@@ -104,6 +169,7 @@ VOICE_PRESETS: dict[str, dict[str, str]] = {
 # Weather / ffmpeg
 # ---------------------------------------------------------------------------
 WEATHER_LOCATION = os.getenv("TABLEPET_WEATHER_LOCATION", "Toronto")
+ITUNES_SEARCH_URL = os.getenv("TABLEPET_ITUNES_SEARCH_URL", "https://itunes.apple.com/search")
 FFMPEG_BIN = (
     os.getenv("FFMPEG_BIN")
     or shutil.which("ffmpeg")

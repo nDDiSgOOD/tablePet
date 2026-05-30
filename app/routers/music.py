@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from .. import state
 from ..config import JAY_CHOU_DIR, MEDIA_DIR, MUSIC_CACHE_DIR
-from ..services.music import convert_music_to_wav, music_candidates
+from ..services.music import convert_music_to_wav, jay_chou_wav, music_candidates
 from ..usb.protocol import usb_active_device_id
 from ..utils.audio import write_demo_music
 
@@ -26,14 +26,17 @@ async def default_music() -> FileResponse:
 
 @router.get("/music/jay-chou.wav")
 async def jay_chou_music() -> FileResponse:
-    candidates = music_candidates("周杰伦")
-    if not candidates:
+    try:
+        wav_path, label = await asyncio.to_thread(jay_chou_wav)
+    except Exception as exc:
         raise HTTPException(
             status_code=404,
-            detail=f"No local Jay Chou music found in {JAY_CHOU_DIR}.",
-        )
-    wav_path = await asyncio.to_thread(convert_music_to_wav, candidates[0])
-    state.remember_event(usb_active_device_id(), "MUSIC", candidates[0].stem)
+            detail=(
+                f"No local Jay Chou music found in {JAY_CHOU_DIR}, "
+                f"and official preview API failed: {exc}"
+            ),
+        ) from exc
+    state.remember_event(usb_active_device_id(), "MUSIC", label)
     return FileResponse(wav_path, media_type="audio/wav")
 
 
