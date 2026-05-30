@@ -134,7 +134,37 @@ async def _balance_for(active: dict[str, Any] | None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 @router.get("/api/llm/accounts")
 async def api_list_accounts() -> dict[str, Any]:
-    return {"items": list_accounts(DEFAULT_USER_ID)}
+    """列出所有 LLM 账号，**每条都顺手并发拉一次 provider 实时余额**。
+
+    设计要点：
+    - 老实现只返回 DB 里的 balance 字段（默认 0），导致前端列表全是 0，
+      用户必须手点 "🔄 余额" 才能看到真实数。这违反"启动即可用"原则。
+    - 现在统一在路由层对每条账号 await 一次 ``_balance_for(a)``——
+      内部已有 ``_BALANCE_CACHE`` 60s 缓存（见 _BALANCE_TTL），所以
+      多账号并发也不会反复打 provider；同账号 30s 轮询命中缓存几乎零成本。
+    - 失败的 provider 退化为 ``balance_source='local'``（用 DB 里的兜底值）
+      或 ``'none'``，前端按现有 ``bal-tag`` 渲染逻辑展示。
+    - 用 ``asyncio.gather`` 并发，N 条账号总耗时 ≈ 单条 RTT，不会线性放大。
+    """
+    import asyncio
+
+    items = list_accounts(DEFAULT_USER_ID)
+    if not items:
+        return {"items": []}
+
+    async def _enrich(a: dict[str, Any]) -> dict[str, Any]:
+        bal = await _balance_for(a)
+        # _balance_for 返回 {balance, balance_currency, balance_source[, remote_extra]}
+        # 注意：直接覆盖原 a 的 balance / balance_currency 字段，让前端
+        # 卡片渲染逻辑（_renderAcctCard 读 a.balance）天然拿到实时值，不用
+        # 再单独维护 _liveBalance map。balance_source 也带上方便前端打 tag。
+        a["balance"] = bal["balance"]
+        a["balance_currency"] = bal["balance_currency"] or a.get("balance_currency") or "CNY"
+        a["balance_source"] = bal["balance_source"]
+        return a
+
+    enriched = await asyncio.gather(*(_enrich(a) for a in items))
+    return {"items": list(enriched)}
 
 
 @router.get("/api/llm/active")
@@ -159,9 +189,19 @@ async def api_create_account(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.put("/api/llm/accounts/{account_id}")
 async def api_update_account(account_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-    if not get_account(DEFAULT_USER_ID, account_id):
+    existing = get_account(DEFAULT_USER_ID, account_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="account not found")
-    upsert_account(DEFAULT_USER_ID, payload, account_id=account_id)
+    # 余额 / 币种现在完全由 provider 远程查询，前端不再录入。如果调用方
+    # 没传这两个字段，保持数据库旧值不动，避免误把老用户手填过的兜底值
+    # 覆盖成 0（虽然显示不依赖它，但 _balance_for 在 provider 拿不到时
+    # 会用它做 fallback，写成 0 会让 fallback 跌成 "0 元"）。
+    merged = {**payload}
+    if "balance" not in merged and existing.get("balance") is not None:
+        merged["balance"] = existing["balance"]
+    if "balance_currency" not in merged and existing.get("balance_currency"):
+        merged["balance_currency"] = existing["balance_currency"]
+    upsert_account(DEFAULT_USER_ID, merged, account_id=account_id)
     _invalidate_balance_cache(account_id)
     return {"ok": True}
 
@@ -180,6 +220,138 @@ async def api_delete_account(account_id: int) -> dict[str, bool]:
         raise HTTPException(status_code=404, detail="account not found")
     _invalidate_balance_cache(account_id)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# 模型清单探测 / Probe available models via OpenAI-compatible /v1/models
+# ---------------------------------------------------------------------------
+_MODELS_CACHE: dict[str, dict[str, Any]] = {}  # cache key -> {ts, models}
+_MODELS_TTL = 300.0  # 5 分钟，避免 input 抖动反复打 provider
+
+
+def _models_url_candidates(base_url: str) -> list[str]:
+    """按"先 DeepSeek 风格 / 再 OpenAI 风格"返回候选 URL 列表。
+
+    各 provider 的官方 spec 不一致：
+    - DeepSeek 文档：``GET https://api.deepseek.com/models``（**无 /v1**）
+    - OpenAI 文档：``GET https://api.openai.com/v1/models``（**必须 /v1**）
+    - Moonshot / 智谱 / 通义等多遵循 OpenAI 风格
+
+    所以单一拼接路径会漏。我们做双探测，第一个返 200 且 schema 合法就用它。
+    用户写 base_url 时也可能已经写到 /v1 后缀，这里都做归一化。
+    """
+    base = (base_url or "").rstrip("/")
+    # 用户可能写成 .../chat/completions 这种"已经写到具体方法"的形式，
+    # 把它退回到根 base
+    if base.endswith("/chat/completions"):
+        base = base[: -len("/chat/completions")]
+    # 再剥掉一个 /v1（如果有），统一成 root，方便我们组合两种候选
+    root = base[:-3].rstrip("/") if base.endswith("/v1") else base
+    candidates: list[str] = []
+    # 先 DeepSeek 风格（无 /v1）—— 这是 DeepSeek 文档的官方推荐路径
+    candidates.append(f"{root}/models")
+    # 再 OpenAI 风格（带 /v1）—— OpenAI / Moonshot / 智谱 等的标准
+    candidates.append(f"{root}/v1/models")
+    # 去重保留顺序
+    seen: set[str] = set()
+    out: list[str] = []
+    for u in candidates:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+@router.post("/api/llm/probe-models")
+async def api_probe_models(payload: dict[str, Any]) -> dict[str, Any]:
+    """用 ``base_url + api_key`` 双探测拉模型清单。
+
+    设计：
+    - 不依赖任何已存账号，纯探测。前端在编辑表单里 ``api_key`` debounce
+      之后调，结果填到自定义 combobox。
+    - 5min 缓存（key = base_url + api_key 末 8 位）；缓存的是接口返回的
+      models 数组本身，不是按输入缓存。
+    - 双探测：先试 DeepSeek 风格 ``{root}/models``，schema 合法就用；
+      否则 fallback OpenAI 风格 ``{root}/v1/models``。两个都拿到结果时，
+      取**模型数量更多**的那个（DeepSeek 上 /v1/models 是 alias 但内容更少
+      的情况就是这条规则的目标场景）。
+    - 401 / 403 直接返 ok=false，不再 fallback —— auth 错跟路径无关。
+    """
+    base_url = str(payload.get("base_url") or "").strip()
+    api_key = str(payload.get("api_key") or "").strip()
+    if not base_url or not api_key:
+        raise HTTPException(status_code=400, detail="base_url 与 api_key 都是必填")
+
+    cache_key = f"{base_url}::{api_key[-8:]}"
+    cached = _MODELS_CACHE.get(cache_key)
+    if cached and time.time() - cached["ts"] < _MODELS_TTL:
+        return {"ok": True, "models": cached["models"], "cached": True}
+
+    candidates = _models_url_candidates(base_url)
+    last_error = ""
+    auth_failed = False
+    successes: list[tuple[str, list[str]]] = []  # (url, models)
+
+    async with httpx.AsyncClient(timeout=8) as client:
+        for url in candidates:
+            try:
+                r = await client.get(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Accept": "application/json",
+                    },
+                )
+            except Exception as exc:
+                last_error = f"网络异常：{str(exc)[:120]}"
+                continue
+
+            if r.status_code in (401, 403):
+                # auth 错跟路径无关，立刻退出 —— 再试别的路径也是 401，纯浪费
+                auth_failed = True
+                last_error = "API Key 无效或没有访问 /models 的权限"
+                break
+            if r.status_code != 200:
+                last_error = f"{url} 返回 HTTP {r.status_code}"
+                continue
+            try:
+                data = r.json()
+            except Exception:
+                last_error = f"{url} 返回非 JSON"
+                continue
+            items = data.get("data") if isinstance(data, dict) else None
+            if not isinstance(items, list):
+                last_error = f"{url} schema 不符合 OpenAI spec"
+                continue
+            models: list[str] = []
+            for it in items:
+                if isinstance(it, dict):
+                    mid = it.get("id")
+                    if isinstance(mid, str) and mid:
+                        models.append(mid)
+            models = sorted(set(models))
+            if models:
+                successes.append((url, models))
+
+    if auth_failed:
+        return {"ok": False, "error": last_error}
+
+    if not successes:
+        return {"ok": False, "error": last_error or "未能从任何标准路径拿到模型清单"}
+
+    # 取模型数量最多的那条 —— 同 provider 不同路径返回不一致时
+    # （DeepSeek 上 /v1/models 是 alias 但只返回部分模型即此场景），
+    # 数量多的更可能是真清单
+    successes.sort(key=lambda x: len(x[1]), reverse=True)
+    chosen_url, chosen_models = successes[0]
+
+    _MODELS_CACHE[cache_key] = {"ts": time.time(), "models": chosen_models}
+    return {
+        "ok": True,
+        "models": chosen_models,
+        "cached": False,
+        "source_url": chosen_url,
+    }
 
 
 @router.post("/api/llm/accounts/{account_id}/refresh-balance")
