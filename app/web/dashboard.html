@@ -346,10 +346,10 @@
      * Brand —— 左上角产品标识。
      * 设计原则（对齐 DESIGN.md 的 product register）：
      *   - 不用 emoji：产品 chrome 上的 emoji 是 SaaS 噪音
-     *   - monogram + wordmark 双轴：monogram 提供色彩温度（accent→pink 渐变，
-     *     呼应桌宠"伙伴"语境），wordmark 用小写 + 字重 700 + tight tracking，
+     *   - monogram + wordmark：monogram 提供色彩温度（accent→pink 渐变，
+     *     呼应桌宠"伙伴"语境），wordmark 用紧 tracking + 字重 700，
      *     像产品 logo 不像系统标题
-     *   - 右侧 GitHub icon button：克制的二级动作，hover 才显形
+     *   - GitHub 入口已并入左下 sidebar-foot，brand 区只承担"产品标识"职责
      *   - 不做 brand-bob 抖动动画：sidebar chrome 的装饰动画是注意力税
      * ===================================================================== */
     .brand {
@@ -375,33 +375,10 @@
     }
     .brand-word {
       flex:1;
-      display:flex; align-items:baseline; gap:2px;
       font-size:var(--fs-lg);
       font-weight:700;
       letter-spacing:-0.025em;
       color:var(--text);
-    }
-    .brand-word .brand-word-strong { font-weight:700; }
-    .brand-word .brand-word-soft   { font-weight:400; color:var(--text-soft); }
-    .brand-gh {
-      display:inline-flex; align-items:center; justify-content:center;
-      width:28px; height:28px;
-      border-radius:var(--r-sm);
-      color:var(--muted);
-      text-decoration:none;
-      transition:color var(--t-fast) var(--ease-out),
-                 background var(--t-fast) var(--ease-out),
-                 transform var(--t-fast) var(--ease-out);
-    }
-    .brand-gh svg { width:18px; height:18px; }
-    .brand-gh:hover {
-      color:var(--text);
-      background:var(--panel-2);
-    }
-    .brand-gh:active { transform:scale(0.94); }
-    .brand-gh:focus-visible {
-      outline:2px solid var(--accent-ring);
-      outline-offset:2px;
     }
 
     /* 对话主入口 —— 玻璃发光按钮 */
@@ -2032,19 +2009,7 @@
   <aside class="sidebar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">T</span>
-      <span class="brand-word">
-        <span class="brand-word-strong">table</span><span class="brand-word-soft">pet</span>
-      </span>
-      <a class="brand-gh"
-         href="https://github.com/nDDiSgOOD/tablePet"
-         target="_blank"
-         rel="noopener noreferrer"
-         aria-label="在 GitHub 上查看源码"
-         title="GitHub">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.87-1.54-3.87-1.54-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18.92-.26 1.91-.39 2.89-.39.98 0 1.97.13 2.89.39 2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.56 4.56-1.52 7.85-5.83 7.85-10.91C23.5 5.65 18.35.5 12 .5z"/>
-        </svg>
-      </a>
+      <span class="brand-word">TablePet</span>
     </div>
 
     <!-- 主入口：对话（玻璃发光按钮） -->
@@ -3923,6 +3888,17 @@ async function refreshDevice() {
    ===================================================================== */
 let lastDeviceAsrKey = '';
 let lastDeviceTtsKey = '';
+/* Web 端开启 TTS 朗读时，sendChat 会先 appendMsg(assistant, reply) 一次，
+ * 然后调 /tts。/tts 内部会写 state.update_device(last_tts_text=...)，
+ * 接着 dashboard 状态轮询拉到 d.last_tts_text → syncDeviceChat 又
+ * appendMsg 一次 → 同一条回复显示两遍。
+ *
+ * 这个 Set 记录"web 自己刚 appendMsg 过的 reply"，syncDeviceChat 命中
+ * 时消费一次跳过。USB / WiFi 设备的语音对话路径（设备说话 → 后端 TTS →
+ * web 通过 polling 看到）不受影响 —— 那条链路上 web 没有事先 appendMsg，
+ * Set 里不会有命中。
+ */
+const _webRepliesShownOnce = new Set();
 function appendMsg(role, text) {
   const isUser = role === 'user';
   const el = document.createElement('div');
@@ -3945,7 +3921,13 @@ function syncDeviceChat(d) {
     const key = `${d.device_id || ''}:${d.last_tts_audio || ''}:${d.last_tts_text}`;
     if (key !== lastDeviceTtsKey) {
       lastDeviceTtsKey = key;
-      appendMsg('assistant', d.last_tts_text);
+      // 如果这条 reply 是 web 自己刚才在 sendChat 里 append 过的（开了朗读 →
+      // /tts 把它写进了 last_tts_text），消费一次去重标记，跳过本轮重复。
+      if (_webRepliesShownOnce.has(d.last_tts_text)) {
+        _webRepliesShownOnce.delete(d.last_tts_text);
+      } else {
+        appendMsg('assistant', d.last_tts_text);
+      }
     }
   }
 }
@@ -3962,10 +3944,17 @@ async function sendChat() {
     const reply = data.reply || '...';
     appendMsg('assistant', reply);
     if ($('chatTtsToggle').checked) {
+      // 标记"这条 reply web 已经显示过"，等会 syncDeviceChat 看到 last_tts_text
+      // 与之相同时会跳过一次 appendMsg，避免重复气泡。
+      _webRepliesShownOnce.add(reply);
       try {
         const r = await api('POST', '/tts', { text: reply });
         if (r.audio_url) new Audio(r.audio_url).play().catch(()=>{});
-      } catch {}
+      } catch {
+        // /tts 失败时也要把标记清掉，否则 USB/WiFi 那边后续偶然出现同名
+        // reply 会被错误吞掉一次。
+        _webRepliesShownOnce.delete(reply);
+      }
     }
   } catch (err) {
     const msg = err.message || '';
