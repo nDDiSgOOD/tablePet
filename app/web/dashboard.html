@@ -4,6 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TablePet 控制台</title>
+  <!--
+    Favicon —— 跟左上角 .brand-mark 同款猫脸 outline，inline 成 data URL，
+    避免新增静态文件。设计判断：
+      - 复用 sidebar brand 的视觉语言（1.5px stroke + 实心耳朵 + 双眼），
+        让浏览器标签页和 app 内身份一致
+      - 颜色固定为 #4FA9D9（dashboard 的 accent oklch(0.78 0.13 230) 的
+        sRGB 近似值）—— favicon 脱离 DOM 渲染上下文，无法用 CSS 变量
+      - viewBox 24×24，stroke 调到 2 让 16px 渲染时线条不糊
+      - 加 fill="none" 给 path 防止 currentColor 误填实心
+      - 同时用 SVG 和 favicon.ico 的 type 提示，老浏览器有 fallback
+        （即便 fallback 失败也只是变默认 icon，不影响功能）
+  -->
+  <link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%234FA9D9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5 L7.6 9.8 L3.6 9.8 Z" fill="%234FA9D9" stroke="none"/><path d="M19 5.5 L16.4 9.8 L20.4 9.8 Z" fill="%234FA9D9" stroke="none"/><path d="M4.2 12.5 C4.2 17 7.6 20 12 20 C16.4 20 19.8 17 19.8 12.5 C19.8 10.4 19 8.8 17.4 8.4"/><path d="M6.6 8.4 C5 8.8 4.2 10.4 4.2 12.5"/><circle cx="9.3" cy="13.5" r="0.85" fill="%234FA9D9" stroke="none"/><circle cx="14.7" cy="13.5" r="0.85" fill="%234FA9D9" stroke="none"/></svg>'>
+  <link rel="apple-touch-icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%234FA9D9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5 L7.6 9.8 L3.6 9.8 Z" fill="%234FA9D9" stroke="none"/><path d="M19 5.5 L16.4 9.8 L20.4 9.8 Z" fill="%234FA9D9" stroke="none"/><path d="M4.2 12.5 C4.2 17 7.6 20 12 20 C16.4 20 19.8 17 19.8 12.5 C19.8 10.4 19 8.8 17.4 8.4"/><path d="M6.6 8.4 C5 8.8 4.2 10.4 4.2 12.5"/><circle cx="9.3" cy="13.5" r="0.85" fill="%234FA9D9" stroke="none"/><circle cx="14.7" cy="13.5" r="0.85" fill="%234FA9D9" stroke="none"/></svg>'>
   <style>
     /* =====================================================================
      * TablePet Dashboard 视觉系统
