@@ -12,6 +12,7 @@
 - **四级记忆体系**：临时上下文 → 短期摘要 → 长期事实 → AI 用户画像，自动晋升 + 衰减。
 - **LangGraph 编排**：load_context → detect_intent → policy → tool_call → llm → parse → save 七节点骨架。
 - **可切人格 / 随机人格**：内置 9 个人格，前端开关一键开启「每条消息随机一个人格回复」。
+- **改名即换页**：把桌宠改名时自动归档当前会话、开新 session，避免 LLM 顺着旧 assistant 历史继续用旧名自称。
 - **TTS 友好输出**：自动剥掉 `（歪头思考）` 一类舞台说明 + emoji + Markdown，USB / WiFi 端走 TTS 不会念违和。
 - **LLM 账号管理**：DeepSeek API Key 落库，主对话走 chat_model、记忆 / 画像 / 开场白走 summary_model；前端实时查余额。
 - **AI 用户画像**：综合「用户主动填写的最新简介 + AI 上一版画像 + 短期长期记忆」三段式生成。
@@ -19,6 +20,18 @@
 - **日记日历**：每天会话自动汇总成日记，可在日历上回看 / 重新总结 / 续接历史会话。
 - **APScheduler 后台任务**：小时心情、每日总结、画像维护全自动。
 - **数据全部本地**：单文件 SQLite，不上云，随时备份。
+
+---
+
+## 🎨 Dashboard 视觉系统
+
+`app/web/dashboard.html` 是单文件前端，承载所有功能面板。它有自己的设计契约（见 [DESIGN.md](DESIGN.md)），近期重点：
+
+- **双主题**：深色（默认，"夜里的木桌"）+ 浅色（温润象牙白），全部 OKLCH token，避开 AI cream / beige 默认。
+- **Sidebar 信息架构**：左上 brand（去 emoji，含 GitHub 入口）→ 对话主入口（玻璃发光按钮）→ 主功能区 → 二级模块（用户简介 / TablePet 状态 / 账户情况）→ 工具区（主题切换 / 设置）。
+- **Topbar chip 交互**：点桌宠名跳宠物状态、点人格弹出选择 popover、点余额跳账户面板，三处全部可点。
+- **Chat stage**：聊天作为主体，输入框靠底（`margin-top:auto`），头像随用户简介 / 桌宠状态实时同步。
+- **Anti-pattern 清单**：严禁 emoji 出现在产品 chrome、严禁渐变文字、严禁 border-left 4px 侧边色条、严禁卡片栅格堆砌。emoji 仅允许出现在「桌宠 / 人格 / 心情」语境（如人格卡片的设定符号）。
 
 ---
 
@@ -160,6 +173,7 @@ tablePet/
 - **「点重新总结提示今天没来找我聊天」**：那一天确实没有 turn 落库，请先发几条消息再总结。
 - **「点生成画像 502」**：先去 dashboard 配 DeepSeek 账号；总结类调用走 `summary_model`，对话走 `chat_model`。
 - **「随机模式 LLM 还在保持上一句的语气」**：[`app/agent/graph.py`](app/agent/graph.py) 里随机模式会强制 prompt「忽略历史语气」，且 `_sanitize_for_tts` 会剥掉括号动作；如果还有问题，看终端日志 `node_llm persona=...` 确认每条消息真的在重抽。
+- **「改名后桌宠还在用旧名自称」**：从 `frontend_optimation` 分支起，PUT `/api/pet/status` 检测到 name 变更会自动 `close_session_with_summary` + 写一条系统事件到新 session，新对话不会再带上旧 assistant 历史。如果你看到旧名复发，多半是浏览器缓存了旧前端代码，刷新 dashboard 即可。
 - **想清空数据**：直接删除 `data/tablepet.db*`，下次启动会重新建库。
 
 ---
@@ -167,7 +181,8 @@ tablePet/
 ## 📦 分支
 
 - `main`：稳定版本
-- `memory_control`：当前迭代——四级记忆体系 + 人格随机模式 + LLM 账号统一入口
+- `memory_control`：四级记忆体系 + 人格随机模式 + LLM 账号统一入口
+- `frontend_optimation`：dashboard 视觉系统重写（双主题 OKLCH token、sidebar 信息架构、chat stage 重排、改名切 session 修复）
 
 ---
 

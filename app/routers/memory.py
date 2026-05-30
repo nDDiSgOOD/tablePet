@@ -204,13 +204,42 @@ async def api_pet_interact(payload: dict[str, Any]) -> dict[str, Any]:
 async def api_put_pet_status(payload: dict[str, Any]) -> dict[str, Any]:
     """编辑宠物基础资料（name / persona / tagline）。改动会自动写一条
     system_event 到当前 session，让 AI 知道"主人调整了我的设定"。
+
+    特别地：当 ``name`` 真的发生变化时，会**强制关闭当前 active session**
+    并把改名叙述写到新 session 的开头。原因是 LLM 在同一段对话里看到自己
+    之前用旧名（"喵酱"）回应过，会强烈倾向继续使用旧名 —— 单靠 system
+    指令压不住 assistant 历史的"延续效应"。把改名当成"换一段对话的天然
+    分界点"是最干净的解法，旧 session 仍会通过短期/长期记忆保留下来。
     """
     old = get_pet_state(DEFAULT_USER_ID)
     new = update_pet_state(DEFAULT_USER_ID, **payload)
     narrative = _diff_pet_narrative(old, new)
-    if narrative:
-        append_system_event(DEFAULT_USER_ID, narrative)
-    return {"ok": True, "status": new}
+
+    name_changed = (
+        str(old.get("name") or "").strip() != str(new.get("name") or "").strip()
+    )
+
+    if name_changed:
+        # 1) 先归档当前 session（含 LLM 摘要 + 短期记忆压缩），避免记忆断片
+        try:
+            await close_session_with_summary(DEFAULT_USER_ID)
+        except Exception:
+            # 摘要失败不阻塞改名 —— 兜底直接物理关闭
+            try:
+                close_active_session(DEFAULT_USER_ID, summary="", title="")
+            except Exception:
+                pass
+        # 2) 把改名叙述写到"新 session"的开头
+        #    append_system_event → append_turn → get_or_create_active
+        #    旧 active 已经 closed_at 了，这里会自动开一条新的 active session。
+        if narrative:
+            append_system_event(DEFAULT_USER_ID, narrative)
+    else:
+        # persona / tagline 改动留在当前 session 里（不切断对话连续性）
+        if narrative:
+            append_system_event(DEFAULT_USER_ID, narrative)
+
+    return {"ok": True, "status": new, "session_rolled": name_changed}
 
 
 # ---------------------------------------------------------------------------
