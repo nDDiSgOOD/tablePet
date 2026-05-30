@@ -346,39 +346,40 @@
      * Brand —— 左上角产品标识。
      * 设计原则（对齐 DESIGN.md 的 product register）：
      *   - 不用 emoji：产品 chrome 上的 emoji 是 SaaS 噪音
-     *   - monogram + wordmark：monogram 提供色彩温度（accent→pink 渐变，
-     *     呼应桌宠"伙伴"语境），wordmark 用紧 tracking + 字重 700，
-     *     像产品 logo 不像系统标题
-     *   - GitHub 入口已并入左下 sidebar-foot，brand 区只承担"产品标识"职责
+     *   - mark：1.5px stroke 极简猫脸 outline——给"桌宠伙伴"留一点语义
+     *     暗示，但作为线条 icon 而不是 emoji，跟 nav-icon 同视觉语言
+     *   - wordmark：字重 600（不是 700，更产品而非品牌）+ tighter tracking，
+     *     和 mark 形成稳定的视觉比例
+     *   - GitHub 入口已并入左下 sidebar-foot，brand 区只承担"产品标识"
      *   - 不做 brand-bob 抖动动画：sidebar chrome 的装饰动画是注意力税
      * ===================================================================== */
     .brand {
-      display:flex; align-items:center; gap:var(--s-2);
+      display:flex; align-items:center; gap:10px;
       padding:0 var(--s-3) var(--s-4);
       margin-bottom:var(--s-3);
     }
     .brand-mark {
       display:inline-flex; align-items:center; justify-content:center;
-      width:26px; height:26px;
-      border-radius:7px;
-      background:linear-gradient(135deg,
-        var(--accent) 0%,
-        color-mix(in oklch, var(--pink) 80%, var(--accent)) 100%);
-      color:var(--accent-ink);
-      font-weight:800;
-      font-size:14px;
-      letter-spacing:-0.02em;
+      width:28px; height:28px;
       flex-shrink:0;
-      box-shadow:
-        inset 0 1px 0 oklch(1 0 0 / 0.18),
-        0 1px 2px oklch(0 0 0 / 0.30);
+      color:var(--accent);
+      transition:color var(--t-base) var(--ease-out),
+                 transform var(--t-base) var(--ease-out);
+    }
+    .brand-mark svg { width:100%; height:100%; display:block; }
+    .brand:hover .brand-mark {
+      color:color-mix(in oklch, var(--accent) 70%, var(--pink) 30%);
+      transform:rotate(-4deg);
     }
     .brand-word {
       flex:1;
-      font-size:var(--fs-lg);
-      font-weight:700;
-      letter-spacing:-0.025em;
+      font-size:17px;
+      font-weight:600;
+      letter-spacing:-0.02em;
       color:var(--text);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .brand-mark, .brand:hover .brand-mark { transition:none; transform:none; }
     }
 
     /* 对话主入口 —— 玻璃发光按钮 */
@@ -1885,6 +1886,114 @@
     @keyframes hint-pulse {
       0%,100% { opacity:0.35 } 50% { opacity:1 }
     }
+
+    /* =====================================================================
+     * Model combobox —— 替代浏览器原生 datalist
+     * --------------------------------------------------------------------
+     * 设计判断：datalist 是浏览器原生 UI，无法 CSS 化，跟项目 OKLCH token
+     * 视觉脱节。手写一个 combobox：
+     *   - input 仍可手填（支持 provider 不返回的"内部模型"）
+     *   - 右侧 caret 图标作为开合视觉锚点（pointer-events:none，整个 shell
+     *     聚焦输入框）
+     *   - popover 浮层用 panel-2 + line border + shadow-pop，跟 personaPopover
+     *     视觉一致
+     *   - option 高亮态用 accent-soft，hover 用 panel-3
+     *   - 键盘：↑↓ 导航 / Enter 选择 / Esc 关闭
+     *   - 输入实时过滤（不区分大小写、子串匹配）
+     * ===================================================================== */
+    .model-combobox { position:relative; }
+    .combo-shell {
+      position:relative;
+      display:flex; align-items:stretch;
+    }
+    .combo-shell input {
+      flex:1; min-width:0;
+      padding-right:34px !important;  /* 给 caret 留位 */
+    }
+    .combo-shell input:focus {
+      border-color:var(--accent);
+      outline:none;
+    }
+    .combo-caret {
+      position:absolute; top:50%; right:6px;
+      transform:translateY(-50%);
+      width:24px; height:24px;
+      display:flex; align-items:center; justify-content:center;
+      background:transparent; border:none; padding:0;
+      color:var(--muted);
+      pointer-events:none;
+      transition:color var(--t-fast) var(--ease-out),
+                 transform var(--t-fast) var(--ease-out);
+    }
+    .combo-caret svg { width:11px; height:11px; }
+    .combo-shell input:focus ~ .combo-caret { color:var(--accent); }
+    .model-combobox.is-open .combo-caret {
+      color:var(--accent);
+      transform:translateY(-50%) rotate(180deg);
+    }
+    .combo-pop {
+      position:absolute;
+      top:calc(100% + 4px);
+      left:0; right:0;
+      max-height:240px;
+      overflow-y:auto;
+      background:var(--panel-2);
+      border:1px solid var(--line);
+      border-radius:var(--r-md);
+      box-shadow:var(--shadow-pop);
+      padding:4px;
+      z-index:var(--z-dropdown);
+      animation:combo-in 140ms var(--ease-out);
+    }
+    @keyframes combo-in {
+      from { opacity:0; transform:translateY(-4px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .combo-opt {
+      display:flex; align-items:center; gap:8px;
+      padding:7px 10px;
+      border-radius:var(--r-sm);
+      cursor:pointer;
+      font-family:var(--mono);
+      font-size:var(--fs-md);
+      color:var(--text-soft);
+      line-height:1.3;
+      transition:background var(--t-fast) var(--ease-out),
+                 color var(--t-fast) var(--ease-out);
+    }
+    .combo-opt:hover { background:var(--panel-3); color:var(--text); }
+    .combo-opt.is-active {
+      background:var(--accent-soft);
+      color:var(--text);
+    }
+    .combo-opt.is-selected::before {
+      content:"";
+      width:6px; height:6px;
+      border-radius:50%;
+      background:var(--accent);
+      flex-shrink:0;
+    }
+    .combo-opt:not(.is-selected)::before {
+      content:"";
+      width:6px; height:6px;
+      flex-shrink:0;  /* 占位让所有行对齐 */
+    }
+    .combo-empty {
+      padding:14px 10px;
+      font-size:var(--fs-sm);
+      color:var(--muted);
+      text-align:center;
+    }
+    /* 滚动条窄一点，跟项目其它窄滚动条一致 */
+    .combo-pop::-webkit-scrollbar { width:6px; }
+    .combo-pop::-webkit-scrollbar-thumb {
+      background:var(--line);
+      border-radius:3px;
+    }
+    .combo-pop::-webkit-scrollbar-thumb:hover { background:var(--line-soft); }
+    @media (prefers-reduced-motion: reduce) {
+      .combo-pop, .combo-caret { animation:none; transition:none; }
+    }
     .acct-form-actions {
       display:flex; gap:10px; justify-content:flex-end; margin-top:6px;
       padding-top:14px;
@@ -2026,7 +2135,18 @@
 <div id="app">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true">T</span>
+      <span class="brand-mark" aria-hidden="true">
+        <!-- 极简猫脸：耳朵两个三角 + 圆脸 + 一对眼睛。1.5px stroke，跟 nav-icon 同语言 -->
+        <svg viewBox="0 0 28 28" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 6.5 L9 11.5 L4.5 11.5 Z" fill="currentColor" stroke="none"/>
+          <path d="M22 6.5 L19 11.5 L23.5 11.5 Z" fill="currentColor" stroke="none"/>
+          <path d="M5 14.5 C5 19.5 8.5 23 14 23 C19.5 23 23 19.5 23 14.5 C23 12.2 22.2 10.5 20.5 10"/>
+          <path d="M7.5 10 C5.8 10.5 5 12.2 5 14.5"/>
+          <circle cx="11" cy="15.5" r="0.9" fill="currentColor" stroke="none"/>
+          <circle cx="17" cy="15.5" r="0.9" fill="currentColor" stroke="none"/>
+        </svg>
+      </span>
       <span class="brand-word">TablePet</span>
     </div>
 
@@ -2594,14 +2714,37 @@
               <span class="field-hint" id="acctProbeHint" aria-live="polite"></span>
             </div>
 
-            <datalist id="acctModelList"></datalist>
-            <div class="field">
+            <!-- 自定义 combobox：input + popover，替代浏览器原生 datalist
+                 （datalist 完全不能 CSS 化，跟 OKLCH token 视觉脱节） -->
+            <div class="field model-combobox" data-target="chat_model">
               <span class="field-label">主对话模型</span>
-              <input name="chat_model" list="acctModelList" placeholder="比如：deepseek-chat" autocomplete="off">
+              <div class="combo-shell">
+                <input name="chat_model" placeholder="比如：deepseek-chat" autocomplete="off"
+                       role="combobox" aria-expanded="false" aria-autocomplete="list"
+                       aria-controls="modelPopChat">
+                <button type="button" class="combo-caret" tabindex="-1" aria-hidden="true">
+                  <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"
+                       stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 4.5 L6 7.5 L9 4.5"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="combo-pop" id="modelPopChat" role="listbox" hidden></div>
             </div>
-            <div class="field">
+            <div class="field model-combobox" data-target="summary_model">
               <span class="field-label">总结模型（便宜一点）</span>
-              <input name="summary_model" list="acctModelList" placeholder="比如：deepseek-chat" autocomplete="off">
+              <div class="combo-shell">
+                <input name="summary_model" placeholder="比如：deepseek-chat" autocomplete="off"
+                       role="combobox" aria-expanded="false" aria-autocomplete="list"
+                       aria-controls="modelPopSum">
+                <button type="button" class="combo-caret" tabindex="-1" aria-hidden="true">
+                  <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"
+                       stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 4.5 L6 7.5 L9 4.5"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="combo-pop" id="modelPopSum" role="listbox" hidden></div>
             </div>
 
             <div class="field full acct-form-actions">
@@ -4701,12 +4844,141 @@ function _setProbeHint(text, kind /* '' | 'ok' | 'err' | 'loading' */) {
   el.className = 'field-hint' + (kind ? ` is-${kind}` : '');
 }
 function _renderModelDatalist(models) {
-  const dl = $('acctModelList');
-  if (!dl) return;
-  dl.innerHTML = (models || [])
-    .map(m => `<option value="${escapeHtml(m)}"></option>`)
-    .join('');
+  // 把模型清单交给两个 combobox（chat_model / summary_model），各自再
+  // 根据当前 input 值做一次过滤后渲染。开放给探测回调用同一个方法名是
+  // 历史命名，名字虽然带 datalist 但底层已经换成自定义 combobox。
+  _modelCatalog = Array.isArray(models) ? models.slice() : [];
+  document.querySelectorAll('.model-combobox').forEach(_renderComboPop);
 }
+
+/* =====================================================================
+   自定义 combobox 控制器：
+   - 状态：_modelCatalog（全部探测到的模型）+ 每个 combobox 自己的
+     activeIndex / open 状态写在 dataset 里，避免再多 N 个全局变量
+   - 行为：focus / 输入 / 点 caret / 点 input 都开 popover；
+     ↑↓ 移动高亮，Enter 选定，Esc 关闭；点外部关闭
+   ===================================================================== */
+let _modelCatalog = [];
+
+function _filterModels(query) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return _modelCatalog;
+  return _modelCatalog.filter(m => m.toLowerCase().includes(q));
+}
+
+function _renderComboPop(comboEl) {
+  const pop = comboEl.querySelector('.combo-pop');
+  const input = comboEl.querySelector('input');
+  if (!pop || !input) return;
+  const list = _filterModels(input.value);
+  const selected = (input.value || '').trim();
+  if (!list.length) {
+    if (!_modelCatalog.length) {
+      pop.innerHTML = '<div class="combo-empty">还没探测到模型，先填好 API Key</div>';
+    } else {
+      pop.innerHTML = '<div class="combo-empty">没有匹配的模型，可直接手填</div>';
+    }
+    return;
+  }
+  pop.innerHTML = list.map((m, i) => {
+    const cls = ['combo-opt'];
+    if (m === selected) cls.push('is-selected');
+    return `<div class="${cls.join(' ')}" role="option" data-idx="${i}" data-val="${escapeHtml(m)}">${escapeHtml(m)}</div>`;
+  }).join('');
+  // 鼠标悬停 / 点击交互
+  pop.querySelectorAll('.combo-opt').forEach(opt => {
+    opt.addEventListener('mouseenter', () => {
+      pop.querySelectorAll('.combo-opt.is-active').forEach(x => x.classList.remove('is-active'));
+      opt.classList.add('is-active');
+    });
+    opt.addEventListener('mousedown', (ev) => {
+      // 用 mousedown 而不是 click —— click 会先触发 input blur，
+      // popover 已经被关掉了拿不到 target
+      ev.preventDefault();
+      input.value = opt.dataset.val;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      _closeCombo(comboEl);
+    });
+  });
+}
+
+function _openCombo(comboEl) {
+  const pop = comboEl.querySelector('.combo-pop');
+  const input = comboEl.querySelector('input');
+  if (!pop || !input) return;
+  _renderComboPop(comboEl);
+  pop.hidden = false;
+  comboEl.classList.add('is-open');
+  input.setAttribute('aria-expanded', 'true');
+}
+
+function _closeCombo(comboEl) {
+  const pop = comboEl.querySelector('.combo-pop');
+  const input = comboEl.querySelector('input');
+  if (!pop) return;
+  pop.hidden = true;
+  comboEl.classList.remove('is-open');
+  if (input) input.setAttribute('aria-expanded', 'false');
+}
+
+function _moveComboActive(comboEl, delta) {
+  const pop = comboEl.querySelector('.combo-pop');
+  if (!pop || pop.hidden) return;
+  const opts = Array.from(pop.querySelectorAll('.combo-opt'));
+  if (!opts.length) return;
+  const cur = opts.findIndex(o => o.classList.contains('is-active'));
+  let next = cur + delta;
+  if (next < 0) next = opts.length - 1;
+  if (next >= opts.length) next = 0;
+  opts.forEach(o => o.classList.remove('is-active'));
+  opts[next].classList.add('is-active');
+  // 滚到视口
+  opts[next].scrollIntoView({ block: 'nearest' });
+}
+
+function _selectComboActive(comboEl) {
+  const pop = comboEl.querySelector('.combo-pop');
+  const input = comboEl.querySelector('input');
+  if (!pop || pop.hidden || !input) return false;
+  const active = pop.querySelector('.combo-opt.is-active');
+  if (!active) return false;
+  input.value = active.dataset.val;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  _closeCombo(comboEl);
+  return true;
+}
+
+// 给两个 combobox 装事件
+document.querySelectorAll('.model-combobox').forEach(comboEl => {
+  const input = comboEl.querySelector('input');
+  const caret = comboEl.querySelector('.combo-caret');
+  if (!input) return;
+  input.addEventListener('focus', () => _openCombo(comboEl));
+  input.addEventListener('input', () => _renderComboPop(comboEl));
+  // caret 在 CSS 里 pointer-events:none，所以用 shell 兜底点击 → focus input
+  comboEl.querySelector('.combo-shell').addEventListener('mousedown', (ev) => {
+    if (ev.target === input) return;
+    ev.preventDefault();
+    input.focus();
+    _openCombo(comboEl);
+  });
+  input.addEventListener('keydown', (ev) => {
+    switch (ev.key) {
+      case 'ArrowDown': ev.preventDefault(); _openCombo(comboEl); _moveComboActive(comboEl, 1); break;
+      case 'ArrowUp':   ev.preventDefault(); _openCombo(comboEl); _moveComboActive(comboEl, -1); break;
+      case 'Enter':
+        if (_selectComboActive(comboEl)) ev.preventDefault();
+        break;
+      case 'Escape':
+        _closeCombo(comboEl);
+        break;
+    }
+  });
+  // blur 延迟关闭，让 mousedown 选中先生效
+  input.addEventListener('blur', () => {
+    setTimeout(() => _closeCombo(comboEl), 120);
+  });
+});
 async function _probeModelsNow() {
   const f = $('acctForm');
   if (!f) return;
