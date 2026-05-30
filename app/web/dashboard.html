@@ -941,6 +941,9 @@
       border-radius:var(--r-md);
       background:var(--panel-2);
       overflow:hidden;
+      flex-shrink:0;  /* ★ 防止父 flex 容器把卡压缩，导致 actions
+                         被 .session-card 的 overflow:hidden 切掉，
+                         视觉上像 summary 和按钮"重叠" */
       transition:border-color var(--t-fast), background var(--t-fast);
     }
     .session-card:hover {
@@ -2406,6 +2409,17 @@
 
           <div class="panel-title" style="margin-top:24px; margin-bottom:8px;">自定义字段</div>
           <div id="customViewList"><div class="empty">暂无自定义字段</div></div>
+
+          <!-- 长期画像（profile facts） —— 从"记忆管理"页迁过来。
+               用户主动登记的'关于我自己的事实'，跟基础信息 / 自定义字段
+               同语境，留在用户简介里。-->
+          <div class="panel-title" style="margin-top:24px; margin-bottom:8px;">长期画像</div>
+          <div class="small" style="margin-bottom:10px;">主动告诉桌宠的事实，桌宠回答时会一并参考。</div>
+          <div class="memory-list compact" id="profileList"><div class="empty">还没记住任何事</div></div>
+          <div class="memory-add" style="margin-top:10px;">
+            <input id="newMemory" placeholder="比如：我喜欢喝拿铁">
+            <button class="btn primary" id="addMemoryBtn">添加</button>
+          </div>
         </div>
       </div>
 
@@ -3311,10 +3325,11 @@ $$('.navitem').forEach(n => n.addEventListener('click', () => {
 window.addEventListener('hashchange', () => {
   const page = location.hash.slice(1) || 'profile';
   showPage(page);
-  // 进入"记忆"页时自动拉一次会话流水
+  // 进入"记忆"页时自动拉一次会话流水 + AI 画像（AI 画像现在挂在记忆管理页）
   if (page === 'memory') {
     _sessionsBeforeId = null;
     if (typeof refreshSessions === 'function') refreshSessions({ append: false });
+    if (typeof refreshAiProfile === 'function') refreshAiProfile();
   }
 });
 showPage(location.hash.slice(1) || 'profile');
@@ -4767,8 +4782,8 @@ async function refreshCalendar() {
   grid.querySelectorAll('[data-day]').forEach(el => {
     el.addEventListener('click', () => selectDay(el.dataset.day));
   });
-
-  refreshAiProfile();
+  // AI 画像已迁到记忆管理页，不再随日历刷新；进入记忆管理页时
+  // 由 hashchange + bootstrap 兜底触发 refreshAiProfile。
 }
 
 async function selectDay(ymd) {
@@ -5654,10 +5669,15 @@ async function bootstrap() {
   refreshChatHero();
   loadGreeting();
   // 用户首次进来或刷新页面时如果已经停在 #memory，hashchange 不会触发，
-  // 这里兜底拉一次会话流水，免得用户看到"点击右上角刷新加载"空状态。
+  // 这里兜底拉一次会话流水 + AI 画像，免得用户看到空状态。
   if ((location.hash.slice(1) || 'profile') === 'memory') {
     if (typeof refreshSessions === 'function') refreshSessions({ append: false });
+    if (typeof refreshAiProfile === 'function') refreshAiProfile();
   }
+  // bootstrap 兜底：无论当前在哪一页都先拉一次 AI 画像（因为 hashchange
+  // 进入 calendar 页时不再调，refreshAiProfile 不会被自动触发）。这样
+  // 用户切到记忆管理那一刻就能看到画像，不用等 hashchange。
+  if (typeof refreshAiProfile === 'function') refreshAiProfile();
 
   // 切换到账户页时强制刷一次（可能用户改完后切回来）
   window.addEventListener('hashchange', () => {
