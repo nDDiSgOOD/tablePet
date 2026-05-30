@@ -134,7 +134,37 @@ async def _balance_for(active: dict[str, Any] | None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 @router.get("/api/llm/accounts")
 async def api_list_accounts() -> dict[str, Any]:
-    return {"items": list_accounts(DEFAULT_USER_ID)}
+    """列出所有 LLM 账号，**每条都顺手并发拉一次 provider 实时余额**。
+
+    设计要点：
+    - 老实现只返回 DB 里的 balance 字段（默认 0），导致前端列表全是 0，
+      用户必须手点 "🔄 余额" 才能看到真实数。这违反"启动即可用"原则。
+    - 现在统一在路由层对每条账号 await 一次 ``_balance_for(a)``——
+      内部已有 ``_BALANCE_CACHE`` 60s 缓存（见 _BALANCE_TTL），所以
+      多账号并发也不会反复打 provider；同账号 30s 轮询命中缓存几乎零成本。
+    - 失败的 provider 退化为 ``balance_source='local'``（用 DB 里的兜底值）
+      或 ``'none'``，前端按现有 ``bal-tag`` 渲染逻辑展示。
+    - 用 ``asyncio.gather`` 并发，N 条账号总耗时 ≈ 单条 RTT，不会线性放大。
+    """
+    import asyncio
+
+    items = list_accounts(DEFAULT_USER_ID)
+    if not items:
+        return {"items": []}
+
+    async def _enrich(a: dict[str, Any]) -> dict[str, Any]:
+        bal = await _balance_for(a)
+        # _balance_for 返回 {balance, balance_currency, balance_source[, remote_extra]}
+        # 注意：直接覆盖原 a 的 balance / balance_currency 字段，让前端
+        # 卡片渲染逻辑（_renderAcctCard 读 a.balance）天然拿到实时值，不用
+        # 再单独维护 _liveBalance map。balance_source 也带上方便前端打 tag。
+        a["balance"] = bal["balance"]
+        a["balance_currency"] = bal["balance_currency"] or a.get("balance_currency") or "CNY"
+        a["balance_source"] = bal["balance_source"]
+        return a
+
+    enriched = await asyncio.gather(*(_enrich(a) for a in items))
+    return {"items": list(enriched)}
 
 
 @router.get("/api/llm/active")

@@ -4515,14 +4515,25 @@ function _renderAcctCard(a) {
   const isActive = !!a.is_active;
   const label = a.label || ACCT_PROVIDER_LABEL[a.provider] || a.provider || '未命名';
   const prov  = ACCT_PROVIDER_LABEL[a.provider] || a.provider || '--';
-  const cur   = _acctCurrency(a.balance_currency);
+  // 现在 GET /api/llm/accounts 已经会对每条账号并发跑一次 _balance_for，
+  // 直接读 a.balance_source / a.balance / a.balance_currency 即可。
+  // _liveBalance 仍保留作为 active 账号的覆盖（refreshAccounts 里多调
+  // 一次 /api/llm/active 拿到的最新缓存值），命中时优先用它。
   const live  = _liveBalance.get(a.id);
   const hasLive = live && live.balance != null;
-  const balVal = hasLive ? Number(live.balance).toFixed(2)
-                         : (a.balance != null ? Number(a.balance).toFixed(2) : '--');
-  const balCurEff = hasLive ? _acctCurrency(live.balance_currency) : cur;
-  const balTag = hasLive ? '<span class="bal-tag live">实时</span>'
-                         : (a.balance != null ? '<span class="bal-tag local">本地</span>' : '');
+  const remoteSrc = a.balance_source === 'remote';
+  const localSrc  = a.balance_source === 'local';
+  const balValRaw = hasLive ? live.balance : a.balance;
+  const balVal = balValRaw != null ? Number(balValRaw).toFixed(2) : '--';
+  const balCurEff = _acctCurrency(
+    (hasLive && live.balance_currency) || a.balance_currency
+  );
+  let balTag = '';
+  if (hasLive || remoteSrc) {
+    balTag = '<span class="bal-tag live">实时</span>';
+  } else if (localSrc && balValRaw != null) {
+    balTag = '<span class="bal-tag local">本地</span>';
+  }
   const initial = ACCT_PROVIDER_INITIAL[a.provider] || '★';
   return `
     <div class="acct-card ${isActive?'active':''}" data-aid="${a.id}">
