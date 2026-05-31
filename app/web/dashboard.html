@@ -3835,7 +3835,8 @@ $('enterBtn').addEventListener('click', () => sessionStorage.setItem('welcomed',
    ===================================================================== */
 function showPage(id) {
   if (id === 'skills' || id === 'mcp') {
-    setCampusTab(id === 'mcp' ? 'mcp' : 'skill');
+    window.__pendingCampusTab = id === 'mcp' ? 'mcp' : 'skill';
+    if (window.__campusTabReady) setCampusTab(window.__pendingCampusTab);
     id = 'campus';
   }
   $$('.page').forEach(p => p.classList.remove('active'));
@@ -4814,6 +4815,7 @@ let lastDeviceTtsKey = '';
  * Set 里不会有命中。
  */
 const _webRepliesShownOnce = new Set();
+let _chatSending = false;
 function appendMsg(role, text) {
   const isUser = role === 'user';
   const el = document.createElement('div');
@@ -4872,9 +4874,18 @@ function syncDeviceChat(d) {
   }
 }
 async function sendChat() {
+  if (_chatSending) {
+    toast('上一条消息还在思考中，先等我回完这句。');
+    return;
+  }
   const text = $('chatInput').value.trim();
   if (!text) return;
   $('chatInput').value = '';
+  _chatSending = true;
+  const sendBtn = $('chatSendBtn');
+  const input = $('chatInput');
+  if (sendBtn) sendBtn.disabled = true;
+  if (input) input.disabled = true;
   appendMsg('user', text);
   const thinking = appendThinkingMsg();
   try {
@@ -4909,6 +4920,11 @@ async function sendChat() {
     } else {
       thinking.finish('⚠️ 网关返回错误：' + msg);
     }
+  } finally {
+    _chatSending = false;
+    if (input) input.disabled = false;
+    if (sendBtn) sendBtn.disabled = input ? input.value.trim().length === 0 : false;
+    if (input) input.focus();
   }
 }
 $('chatSendBtn').addEventListener('click', sendChat);
@@ -5033,6 +5049,8 @@ $('closeExtensionDialog')?.addEventListener('click', closeExtensionDialog);
 $('extensionDialog')?.addEventListener('click', (ev) => {
   if (ev.target === ev.currentTarget) closeExtensionDialog();
 });
+window.__campusTabReady = true;
+if (window.__pendingCampusTab) setCampusTab(window.__pendingCampusTab);
 async function refreshSkills() {
   const grid = $('skillGrid');
   if (!grid) return;
@@ -5112,7 +5130,7 @@ function renderSkillGroup(group) {
         <button class="btn" data-bulk-skill="${escapeHtml(ids)}" data-bulk-enabled="true">全部启用</button>
         <button class="btn" data-bulk-skill="${escapeHtml(ids)}" data-bulk-enabled="false">全部停用</button>
       </div>
-      <details class="skill-children" open>
+      <details class="skill-children">
         <summary>展开子 Skill</summary>
         ${group.items.map(item => `
           <div class="skill-child">
