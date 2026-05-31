@@ -2987,23 +2987,21 @@
             <div class="panel-title">安装 Skill</div>
           </div>
           <form id="skillForm" class="extension-form" autocomplete="off">
-            <label>名称
-              <input name="name" placeholder="例如：代码审查助手">
-            </label>
             <label>来源
               <select name="source_type">
-                <option value="local_dir">本地目录</option>
+                <option value="local_dir_upload">本地文件夹</option>
+                <option value="zip_upload">本地 ZIP</option>
                 <option value="github_repo">GitHub 仓库</option>
-                <option value="git_url">Git URL</option>
-                <option value="zip_url">ZIP URL</option>
               </select>
             </label>
-            <label>目录或仓库地址
-              <input name="source_uri" placeholder="/Users/me/my-skill 或 owner/repo 或 https://github.com/owner/repo">
+            <label id="skillGithubLabel" style="display:none;">GitHub 仓库地址
+              <input name="source_uri" placeholder="owner/repo 或 https://github.com/owner/repo">
             </label>
-            <label>说明
-              <input name="description" placeholder="可留空，优先读取 SKILL.md frontmatter 的 description">
-            </label>
+            <button class="btn" id="skillPickDirBtn" type="button">选择文件夹</button>
+            <button class="btn" id="skillPickZipBtn" type="button" style="display:none;">选择 ZIP</button>
+            <div class="small" id="skillPickedHint">还没有选择文件夹</div>
+            <input id="skillDirInput" type="file" webkitdirectory multiple hidden>
+            <input id="skillZipInput" type="file" accept=".zip,application/zip" hidden>
             <button class="btn primary" type="submit">安装 Skill</button>
           </form>
         </div>
@@ -3028,9 +3026,6 @@
             <div class="panel-title">添加 MCP Server</div>
           </div>
           <form id="mcpForm" class="extension-form" autocomplete="off">
-            <label>名称
-              <input name="name" placeholder="例如：filesystem">
-            </label>
             <label>传输方式
               <select name="transport">
                 <option value="stdio">stdio</option>
@@ -3038,25 +3033,11 @@
                 <option value="sse">SSE</option>
               </select>
             </label>
-            <label>启动命令（stdio）
-              <input name="command" placeholder="npx -y @modelcontextprotocol/server-filesystem /Users/me">
+            <label>连接地址
+              <input name="address" placeholder="stdio: npx -y xxx /path；HTTP/SSE: http://localhost:3001/mcp">
             </label>
-            <label>服务地址（HTTP/SSE）
-              <input name="url" placeholder="http://localhost:3001/mcp">
-            </label>
-            <label>导入来源
-              <select name="source_type">
-                <option value="inline">手写 JSON</option>
-                <option value="local_file">本地 JSON 文件</option>
-                <option value="github_url">GitHub / Raw URL</option>
-                <option value="url">普通 URL</option>
-              </select>
-            </label>
-            <label>配置路径或 URL
-              <input name="source_uri" placeholder="/Users/me/mcp.json 或 https://github.com/...">
-            </label>
-            <label>JSON 配置
-              <textarea name="content" placeholder='{"env":{"GITHUB_TOKEN":"..."}}'></textarea>
+            <label>MCP 说明
+              <input name="description" placeholder="例如：让桌宠读取某个本地目录">
             </label>
             <button class="btn primary" type="submit">添加 MCP</button>
           </form>
@@ -4772,18 +4753,75 @@ function renderMcp() {
     refreshMcp();
   }));
 }
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+async function fileToUpload(file) {
+  return {
+    path: file.webkitRelativePath || file.name,
+    data: arrayBufferToBase64(await file.arrayBuffer()),
+  };
+}
+function updateSkillSourceUI() {
+  const form = $('skillForm');
+  if (!form) return;
+  const source = form.elements.source_type.value;
+  const isDir = source === 'local_dir_upload';
+  const isZip = source === 'zip_upload';
+  $('skillGithubLabel').style.display = source === 'github_repo' ? '' : 'none';
+  $('skillPickDirBtn').style.display = isDir ? '' : 'none';
+  $('skillPickZipBtn').style.display = isZip ? '' : 'none';
+  const hint = $('skillPickedHint');
+  if (hint) {
+    if (source === 'github_repo') hint.textContent = '填写 GitHub 仓库地址即可';
+    else if (isZip) hint.textContent = $('skillZipInput').files[0]?.name || '还没有选择 ZIP';
+    else hint.textContent = $('skillDirInput').files.length ? `已选择 ${$('skillDirInput').files.length} 个文件` : '还没有选择文件夹';
+  }
+}
 const skillForm = $('skillForm');
+if (skillForm) {
+  skillForm.elements.source_type.addEventListener('change', updateSkillSourceUI);
+  $('skillPickDirBtn')?.addEventListener('click', () => $('skillDirInput')?.click());
+  $('skillPickZipBtn')?.addEventListener('click', () => $('skillZipInput')?.click());
+  $('skillDirInput')?.addEventListener('change', updateSkillSourceUI);
+  $('skillZipInput')?.addEventListener('change', updateSkillSourceUI);
+  updateSkillSourceUI();
+}
 if (skillForm) skillForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const f = ev.currentTarget;
   try {
-    await api('POST', '/api/skills', {
-      name: f.elements.name.value.trim(),
-      source_type: f.elements.source_type.value,
-      source_uri: f.elements.source_uri.value.trim(),
-      description: f.elements.description.value.trim(),
-    });
+    const source = f.elements.source_type.value;
+    if (source === 'github_repo') {
+      await api('POST', '/api/skills', {
+        source_type: 'github_repo',
+        source_uri: f.elements.source_uri.value.trim(),
+      });
+    } else if (source === 'zip_upload') {
+      const file = $('skillZipInput').files[0];
+      if (!file) throw new Error('请先选择 ZIP 文件');
+      await api('POST', '/api/skills/upload', {
+        source_type: 'zip_upload',
+        zip_data: arrayBufferToBase64(await file.arrayBuffer()),
+      });
+    } else {
+      const files = Array.from($('skillDirInput').files || []);
+      if (!files.length) throw new Error('请先选择 Skill 文件夹');
+      await api('POST', '/api/skills/upload', {
+        source_type: 'local_dir_upload',
+        files: await Promise.all(files.map(fileToUpload)),
+      });
+    }
     f.reset();
+    $('skillDirInput').value = '';
+    $('skillZipInput').value = '';
+    updateSkillSourceUI();
     toast('已安装 Skill');
     refreshSkills();
   } catch (e) { toast('安装失败：' + e.message, 'error'); }
@@ -4793,14 +4831,13 @@ if (mcpForm) mcpForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const f = ev.currentTarget;
   try {
+    const transport = f.elements.transport.value;
+    const address = f.elements.address.value.trim();
     await api('POST', '/api/mcp', {
-      name: f.elements.name.value.trim(),
-      transport: f.elements.transport.value,
-      command: f.elements.command.value.trim(),
-      url: f.elements.url.value.trim(),
-      source_type: f.elements.source_type.value,
-      source_uri: f.elements.source_uri.value.trim(),
-      content: f.elements.content.value.trim(),
+      transport,
+      command: transport === 'stdio' ? address : '',
+      url: transport === 'stdio' ? '' : address,
+      description: f.elements.description.value.trim(),
     });
     f.reset();
     toast('已添加 MCP');

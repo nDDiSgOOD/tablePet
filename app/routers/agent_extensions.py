@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import re
 import shutil
 import subprocess
@@ -29,6 +30,7 @@ from ..storage.agent_extension import (
 router = APIRouter(prefix="/api")
 
 SkillSourceType = Literal["local_dir", "github_repo", "git_url", "zip_url"]
+SkillUploadSourceType = Literal["local_dir_upload", "zip_upload"]
 McpSourceType = Literal["inline", "local_file", "github_url", "url"]
 
 
@@ -37,6 +39,18 @@ class SkillPayload(BaseModel):
     description: str = Field(default="", max_length=500)
     source_type: SkillSourceType = "local_dir"
     source_uri: str = Field(default="", max_length=1200)
+    enabled: bool = True
+
+
+class SkillUploadFile(BaseModel):
+    path: str = Field(max_length=1200)
+    data: str = Field(max_length=8_000_000)
+
+
+class SkillUploadPayload(BaseModel):
+    source_type: SkillUploadSourceType
+    files: list[SkillUploadFile] = Field(default_factory=list)
+    zip_data: str = Field(default="", max_length=50_000_000)
     enabled: bool = True
 
 
@@ -121,6 +135,76 @@ def _find_skill_file(root: Path, name: str) -> Path | None:
     return None
 
 
+def _parse_skill_meta(path: Path, fallback_name: str) -> tuple[str, str]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return _slug_name(fallback_name), ""
+    data: dict[str, str] = {}
+    lines = raw.splitlines()
+    if lines and lines[0] == "---":
+        try:
+            end = lines.index("---", 1)
+        except ValueError:
+            end = -1
+        if end > 0:
+            for line in lines[1:end]:
+                match = re.match(r"^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$", line)
+                if match:
+                    data[match.group(1)] = match.group(2).strip()
+    name = data.get("name") or fallback_name
+    return _slug_name(name), (data.get("description") or "").strip()
+
+
+def _safe_upload_path(raw: str, strip_prefix: str = "") -> Path:
+    value = raw.replace("\\", "/").lstrip("/")
+    if strip_prefix and value.startswith(strip_prefix + "/"):
+        value = value[len(strip_prefix) + 1:]
+    parts = [p for p in value.split("/") if p and p not in {".", ".."}]
+    if not parts:
+        raise HTTPException(status_code=400, detail="上传文件路径无效。")
+    return Path(*parts)
+
+
+def _decode_upload_data(raw: str) -> bytes:
+    payload = raw.split(",", 1)[1] if raw.startswith("data:") and "," in raw else raw
+    try:
+        return base64.b64decode(payload, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="上传内容不是有效 base64。") from exc
+
+
+def _write_uploaded_dir(files: list[SkillUploadFile], dst: Path) -> None:
+    if not files:
+        raise HTTPException(status_code=400, detail="请选择 Skill 文件夹。")
+    shutil.rmtree(dst)
+    dst.mkdir(parents=True, exist_ok=True)
+    first_parts = [f.path.replace("\\", "/").lstrip("/").split("/", 1)[0] for f in files if "/" in f.path.replace("\\", "/").lstrip("/")]
+    strip_prefix = first_parts[0] if first_parts and all(p == first_parts[0] for p in first_parts) else ""
+    for item in files:
+        rel = _safe_upload_path(item.path, strip_prefix=strip_prefix)
+        if any(p.startswith(".") for p in rel.parts) or any(p in {"node_modules", "__pycache__", ".git"} for p in rel.parts):
+            continue
+        target = dst / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(_decode_upload_data(item.data))
+
+
+def _extract_zip_bytes(raw: str, dst: Path) -> None:
+    with tempfile.TemporaryDirectory() as td:
+        zip_path = Path(td) / "skill.zip"
+        zip_path.write_bytes(_decode_upload_data(raw))
+        try:
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(td)
+        except zipfile.BadZipFile as exc:
+            raise HTTPException(status_code=400, detail="上传内容不是有效 ZIP。") from exc
+        roots = [p for p in Path(td).iterdir() if p.name != "skill.zip" and p.name != "__MACOSX"]
+        root = roots[0] if len(roots) == 1 and roots[0].is_dir() else Path(td)
+        shutil.rmtree(dst)
+        shutil.copytree(root, dst, ignore=shutil.ignore_patterns("__MACOSX", ".DS_Store", "skill.zip"))
+
+
 def _copy_dir(src: Path, dst: Path) -> None:
     if not src.exists() or not src.is_dir():
         raise HTTPException(status_code=400, detail="Skill 本地目录不存在。")
@@ -199,6 +283,35 @@ async def _install_skill_dir(payload: SkillPayload) -> tuple[str, Path]:
     return name, target
 
 
+async def _install_uploaded_skill(payload: SkillUploadPayload) -> tuple[str, str, Path]:
+    target = _unique_skill_dir("skill")
+    try:
+        if payload.source_type == "local_dir_upload":
+            _write_uploaded_dir(payload.files, target)
+        elif payload.source_type == "zip_upload":
+            if not payload.zip_data:
+                raise HTTPException(status_code=400, detail="请选择 ZIP 文件。")
+            _extract_zip_bytes(payload.zip_data, target)
+        else:
+            raise HTTPException(status_code=400, detail="不支持的 Skill 上传方式。")
+        skill_file = _find_skill_file(target, target.name)
+        if skill_file is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Skill 目录里需要包含 SKILL.md（或 <name>.md）。",
+            )
+        name, description = _parse_skill_meta(skill_file, target.name)
+        final_dir = target.with_name(f"{name}-{int(time.time() * 1000)}")
+        if final_dir != target:
+            target.rename(final_dir)
+            target = final_dir
+        return name, description, target
+    except Exception:
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+        raise
+
+
 @router.get("/skills")
 async def api_list_skills() -> dict[str, Any]:
     return {"skills": list_extensions(DEFAULT_USER_ID, "skill")}
@@ -207,13 +320,34 @@ async def api_list_skills() -> dict[str, Any]:
 @router.post("/skills")
 async def api_create_skill(payload: SkillPayload) -> dict[str, Any]:
     name, local_dir = await _install_skill_dir(payload)
+    skill_file = _find_skill_file(local_dir, name)
+    parsed_name, parsed_description = (
+        _parse_skill_meta(skill_file, name) if skill_file else (name, "")
+    )
+    skill = upsert_extension(
+        DEFAULT_USER_ID,
+        kind="skill",
+        name=parsed_name,
+        description=parsed_description,
+        source_type=payload.source_type,
+        source_uri=payload.source_uri.strip(),
+        content="",
+        config={"local_path": str(local_dir), "format": "skill_dir"},
+        enabled=payload.enabled,
+    )
+    return {"ok": True, "skill": skill}
+
+
+@router.post("/skills/upload")
+async def api_upload_skill(payload: SkillUploadPayload) -> dict[str, Any]:
+    name, description, local_dir = await _install_uploaded_skill(payload)
     skill = upsert_extension(
         DEFAULT_USER_ID,
         kind="skill",
         name=name,
-        description=payload.description.strip(),
+        description=description,
         source_type=payload.source_type,
-        source_uri=payload.source_uri.strip(),
+        source_uri="",
         content="",
         config={"local_path": str(local_dir), "format": "skill_dir"},
         enabled=payload.enabled,
