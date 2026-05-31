@@ -1694,6 +1694,7 @@
       display:grid;
       grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
       gap:var(--s-3);
+      align-items:start;
     }
     .skill-card {
       padding:var(--s-4);
@@ -1710,25 +1711,29 @@
     .skill-type { font-size:var(--fs-xs); color:var(--muted); }
     .skill-desc { color:var(--muted); font-size:var(--fs-md); min-height:36px; line-height:1.5; }
     .skill-meta { font-size:var(--fs-xs); color:var(--muted); word-break:break-all; }
-    .skill-children {
+    .skill-collection-foot {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:var(--s-2);
       margin-top:var(--s-2);
-      border-top:1px dashed color-mix(in oklch, var(--line) 55%, transparent);
-      padding-top:var(--s-2);
+      color:var(--muted);
+      font-size:var(--fs-xs);
     }
-    .skill-children summary {
-      cursor:pointer;
-      color:var(--text);
-      font-size:var(--fs-sm);
-      font-weight:600;
+    .skill-child-list {
+      display:grid;
+      gap:var(--s-2);
     }
     .skill-child {
       display:grid;
-      gap:4px;
-      padding:var(--s-2) 0;
-      border-bottom:1px solid color-mix(in oklch, var(--line-soft) 55%, transparent);
+      gap:var(--s-2);
+      padding:var(--s-3);
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:color-mix(in oklch, var(--panel-2) 58%, transparent);
     }
-    .skill-child:last-child { border-bottom:0; }
     .skill-child-head { display:flex; align-items:center; justify-content:space-between; gap:var(--s-2); }
+    .skill-child .skill-desc { min-height:0; }
     .tool-list {
       display:grid;
       gap:6px;
@@ -1989,15 +1994,18 @@
     #confirmBox .actions { display:flex; justify-content:flex-end; gap:var(--s-2); }
 
     /* ========== 会话查看悬浮窗 ========== */
-    #sessionViewerMask {
+    #sessionViewerMask,
+    #skillChildrenMask {
       position:fixed; inset:0; z-index:calc(var(--z-modal) - 100);
       background:rgba(0,0,0,0.6);
       display:none; align-items:center; justify-content:center;
       animation:cfFade var(--t-base) var(--ease-out);
       padding:var(--s-5);
     }
-    #sessionViewerMask.show { display:flex; }
-    #sessionViewerBox {
+    #sessionViewerMask.show,
+    #skillChildrenMask.show { display:flex; }
+    #sessionViewerBox,
+    #skillChildrenBox {
       width:min(900px, 96vw); height:min(80vh, 760px);
       background:var(--panel);
       border:1px solid var(--line);
@@ -2007,6 +2015,7 @@
       animation:cfPop var(--t-base) var(--ease-out);
       overflow:hidden;
     }
+    #skillChildrenBox { width:min(760px, 94vw); height:min(74vh, 680px); }
     .viewer-head {
       display:flex; justify-content:space-between; align-items:flex-start;
       padding:18px 22px 14px;
@@ -3536,6 +3545,21 @@
   </div>
 </div>
 
+<!-- ==================== Skill 子项悬浮窗 ==================== -->
+<div id="skillChildrenMask">
+  <div id="skillChildrenBox">
+    <div class="viewer-head">
+      <div>
+        <h3 id="skillChildrenTitle">子 Skill</h3>
+        <div class="small" id="skillChildrenMeta"></div>
+      </div>
+      <button class="close-x" id="skillChildrenClose" type="button">✕</button>
+    </div>
+    <div id="skillChildrenBody" class="viewer-body"></div>
+    <div id="skillChildrenActions" class="viewer-actions"></div>
+  </div>
+</div>
+
 <!-- ==================== Confirm 弹窗 ==================== -->
 <div id="confirmMask">
   <div id="confirmBox">
@@ -5058,6 +5082,7 @@ async function loadGreeting() {
 let _skills = [];
 let _mcpServers = [];
 let _campusTab = 'skill';
+let _activeSkillChildrenKey = '';
 function setCampusTab(kind) {
   _campusTab = kind === 'mcp' ? 'mcp' : 'skill';
   document.querySelectorAll('[data-campus-tab]').forEach(btn => {
@@ -5160,8 +5185,14 @@ function extensionCard(item, kind) {
     </div>`;
 }
 function skillGroupKey(item) {
+  return isSkillCollectionChild(item) ? `collection-${(item.config || {}).collection_path}` : `skill-${item.id}`;
+}
+function isSkillCollectionChild(item) {
   const cfg = item.config || {};
-  return cfg.collection_path || item.source_uri || item.local_path || cfg.local_path || `skill-${item.id}`;
+  const collectionPath = cfg.collection_path || '';
+  const localPath = item.local_path || cfg.local_path || '';
+  const skillPath = item.skill_path || cfg.skill_path || '';
+  return !!(collectionPath && skillPath && localPath && localPath !== collectionPath);
 }
 function skillDisplayName(item) {
   const cfg = item.config || {};
@@ -5171,12 +5202,28 @@ function skillDisplayDescription(item, fallback='') {
   const cfg = item.config || {};
   return cfg.collection_description || cfg.display_description || item.description || fallback;
 }
+function buildSkillGroups() {
+  const groups = new Map();
+  for (const item of _skills) {
+    const key = skillGroupKey(item);
+    const isCollection = isSkillCollectionChild(item);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        title: isCollection ? skillDisplayName(item) : (item.name || 'Skill'),
+        isCollection,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(item);
+  }
+  return Array.from(groups.values());
+}
 function renderSkillGroup(group) {
   if (group.items.length === 1) return extensionCard(group.items[0], 'skill');
   const enabledCount = group.items.filter(x => x.enabled).length;
   const first = group.items[0] || {};
   const source = first.source_uri || group.key;
-  const ids = group.items.map(x => x.id).filter(Boolean).join(',');
   return `
     <div class="skill-card installed">
       <div class="skill-head">
@@ -5189,28 +5236,12 @@ function renderSkillGroup(group) {
       <div class="skill-desc">${escapeHtml(skillDisplayDescription(first, source) || source)}</div>
       <div class="skill-meta">${escapeHtml(source)}</div>
       <div class="skill-actions">
-        <button class="btn" data-bulk-skill="${escapeHtml(ids)}" data-bulk-enabled="true">全部启用</button>
-        <button class="btn" data-bulk-skill="${escapeHtml(ids)}" data-bulk-enabled="false">全部停用</button>
+        <button class="btn primary" data-open-skill-children="${escapeHtml(group.key)}">查看子 Skill</button>
       </div>
-      <details class="skill-children">
-        <summary>展开子 Skill</summary>
-        ${group.items.map(item => `
-          <div class="skill-child">
-            <div class="skill-child-head">
-              <div>
-                <div class="skill-name">${escapeHtml(item.name || '未命名 Skill')}</div>
-                <div class="skill-meta">${escapeHtml([item.run_as ? `runAs: ${item.run_as}` : '', item.script ? `script: ${item.script_runtime || 'auto'} ${item.script}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', item.skill_path || ''].filter(Boolean).join(' · '))}</div>
-              </div>
-              <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
-            </div>
-            <div class="skill-desc">${escapeHtml(item.description || item.parse_error || '没有 description')}</div>
-            <div class="skill-actions">
-              <button class="btn" data-toggle-skill="${item.id}">${item.enabled?'停用':'启用'}</button>
-              <button class="btn danger" data-delete-skill="${item.id}">卸载</button>
-            </div>
-          </div>
-        `).join('')}
-      </details>
+      <div class="skill-collection-foot">
+        <span>子 Skill 的启停和卸载在浮窗里操作</span>
+        <span>${enabledCount}/${group.items.length} 启用</span>
+      </div>
     </div>`;
 }
 function renderSkills() {
@@ -5219,20 +5250,7 @@ function renderSkills() {
   const count = $('skillCountText');
   const enabledCount = _skills.filter(x => x.enabled).length;
   if (count) count.textContent = `${_skills.length} 个 Skill，${enabledCount} 个启用`;
-  const groups = new Map();
-  for (const item of _skills) {
-    const key = skillGroupKey(item);
-    const cfg = item.config || {};
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        title: cfg.collection_path ? skillDisplayName(item) : (item.name || 'Skill'),
-        items: [],
-      });
-    }
-    groups.get(key).items.push(item);
-  }
-  const list = Array.from(groups.values());
+  const list = buildSkillGroups();
   grid.innerHTML = _skills.length
     ? list.map(renderSkillGroup).join('')
     : '<div class="empty">还没有安装 Skill。可以从本地文件夹、本地 ZIP 或 GitHub 仓库开始。</div>';
@@ -5245,19 +5263,107 @@ function renderSkills() {
     await api('POST', `/api/skills/${encodeURIComponent(b.dataset.toggleSkill)}/toggle`);
     refreshSkills();
   }));
-  grid.querySelectorAll('[data-bulk-skill]').forEach(b => b.addEventListener('click', async () => {
-    const ids = (b.dataset.bulkSkill || '').split(',').filter(Boolean);
-    const enabled = b.dataset.bulkEnabled === 'true';
-    if (!ids.length) return;
+  grid.querySelectorAll('[data-open-skill-children]').forEach(b => b.addEventListener('click', () => {
+    const group = buildSkillGroups().find(g => g.key === b.dataset.openSkillChildren);
+    if (group) openSkillChildrenDialog(group);
+  }));
+}
+function skillChildCard(item) {
+  const meta = [
+    item.run_as ? `runAs: ${item.run_as}` : '',
+    item.script ? `script: ${item.script_runtime || 'auto'} ${item.script}` : '',
+    item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '',
+    item.skill_path || '',
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="skill-child">
+      <div class="skill-child-head">
+        <div>
+          <div class="skill-name">${escapeHtml(item.name || '未命名 Skill')}</div>
+          ${meta ? `<div class="skill-meta">${escapeHtml(meta)}</div>` : ''}
+        </div>
+        <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
+      </div>
+      <div class="skill-desc">${escapeHtml(item.description || item.parse_error || '没有 description')}</div>
+      <div class="skill-actions">
+        <button class="btn" data-dialog-toggle-skill="${item.id}">${item.enabled?'停用':'启用'}</button>
+        <button class="btn danger" data-dialog-delete-skill="${item.id}">卸载</button>
+      </div>
+    </div>`;
+}
+function renderSkillChildrenDialog(group) {
+  const enabledCount = group.items.filter(x => x.enabled).length;
+  const first = group.items[0] || {};
+  $('skillChildrenTitle').textContent = group.title || 'Skill 集合';
+  $('skillChildrenMeta').textContent = `${group.items.length} 个子 Skill，${enabledCount} 个启用 · ${first.source_uri || group.key}`;
+  $('skillChildrenBody').innerHTML = `<div class="skill-child-list">${group.items.map(skillChildCard).join('')}</div>`;
+  $('skillChildrenActions').innerHTML = `
+    <div class="va-left">
+      <button class="btn" data-dialog-bulk-skill="true">全部启用</button>
+      <button class="btn" data-dialog-bulk-skill="false">全部停用</button>
+    </div>
+    <div class="va-right">
+      <button class="btn" id="skillChildrenDone" type="button">关闭</button>
+    </div>`;
+  $('skillChildrenDone').addEventListener('click', closeSkillChildrenDialog);
+  $('skillChildrenBody').querySelectorAll('[data-dialog-toggle-skill]').forEach(b => b.addEventListener('click', async () => {
+    await api('POST', `/api/skills/${encodeURIComponent(b.dataset.dialogToggleSkill)}/toggle`);
+    await refreshSkills();
+    refreshOpenSkillChildrenDialog();
+  }));
+  $('skillChildrenBody').querySelectorAll('[data-dialog-delete-skill]').forEach(b => b.addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: '卸载这个子 Skill？',
+      body: '只会卸载当前子 Skill，不会影响同集合里的其它 Skill。',
+      okText: '卸载',
+      danger: true,
+    });
+    if (!ok) return;
+    await api('DELETE', `/api/skills/${encodeURIComponent(b.dataset.dialogDeleteSkill)}`);
+    toast('已卸载 Skill');
+    await refreshSkills();
+    refreshOpenSkillChildrenDialog();
+  }));
+  $('skillChildrenActions').querySelectorAll('[data-dialog-bulk-skill]').forEach(b => b.addEventListener('click', async () => {
+    const enabled = b.dataset.dialogBulkSkill === 'true';
+    const ids = group.items.map(x => x.id).filter(Boolean);
     try {
       await Promise.all(ids.map(id => api('POST', `/api/skills/${encodeURIComponent(id)}/toggle`, { enabled })));
       toast(enabled ? '已全部启用' : '已全部停用');
-      refreshSkills();
+      await refreshSkills();
+      refreshOpenSkillChildrenDialog();
     } catch (e) {
       toast('批量操作失败：' + e.message, 'error');
     }
   }));
 }
+function openSkillChildrenDialog(group) {
+  _activeSkillChildrenKey = group.key;
+  $('skillChildrenMask').classList.add('show');
+  renderSkillChildrenDialog(group);
+}
+function refreshOpenSkillChildrenDialog() {
+  if (!_activeSkillChildrenKey) return;
+  const group = buildSkillGroups().find(g => g.key === _activeSkillChildrenKey);
+  if (!group || group.items.length <= 1) {
+    closeSkillChildrenDialog();
+    return;
+  }
+  renderSkillChildrenDialog(group);
+}
+function closeSkillChildrenDialog() {
+  $('skillChildrenMask').classList.remove('show');
+  _activeSkillChildrenKey = '';
+}
+$('skillChildrenClose').addEventListener('click', closeSkillChildrenDialog);
+$('skillChildrenMask').addEventListener('click', (e) => {
+  if (e.target === $('skillChildrenMask')) closeSkillChildrenDialog();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('skillChildrenMask').classList.contains('show')) {
+    closeSkillChildrenDialog();
+  }
+});
 function schemaType(schema) {
   if (!schema || typeof schema !== 'object') return 'string';
   if (schema.type) return Array.isArray(schema.type) ? schema.type[0] : schema.type;
