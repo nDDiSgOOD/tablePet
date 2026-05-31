@@ -88,11 +88,29 @@ SAFE_COMMAND_PREFIXES = (
     ("pytest",),
     ("python", "-m", "pytest"),
     ("python3", "-m", "pytest"),
+    ("python",),
+    ("python3",),
+    ("node",),
+    ("bash",),
+    ("sh",),
 )
+SKILL_SCRIPT_SUFFIX_RUNTIME = {
+    ".py": [sys.executable],
+    ".js": ["node"],
+    ".mjs": ["node"],
+    ".cjs": ["node"],
+    ".sh": ["bash"],
+    ".bash": ["bash"],
+}
 RISKY_COMMAND_ARGS = {
     "find": {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"},
     "rg": {"--replace", "-r", "--files-without-match"},
     "grep": {"--exclude-dir=*", "--include=*"},
+    "python": {"-c", "-m", "-i", "--interactive"},
+    "python3": {"-c", "-m", "-i", "--interactive"},
+    "node": {"-e", "--eval", "-p", "--print"},
+    "bash": {"-c", "-i", "--login"},
+    "sh": {"-c", "-i", "--login"},
 }
 SHELL_METACHARS = re.compile(r"(?:\|\||&&|[|;&`<>]|\$\(|\$\{|\n)")
 
@@ -278,8 +296,9 @@ def build_skills_index_context(user_id: str) -> str:
         "",
         "Only a short index is pinned here. When a skill matches the user's request, call the `run_skill` tool with the bare skill name and a concise arguments string. The tool will read the local SKILL.md body on demand. Do not copy the [subagent] tag into the name.",
         "For multi-file skills, first call `run_skill`, then use `list_skill_files`, `read_skill_file`, or `search_skill_files` to inspect referenced files inside that Skill directory.",
-        "Use `run_skill_command` only for safe allowlisted inspection/test commands inside the Skill directory. It does not run through a shell, does not persist cd, and rejects high-risk syntax.",
-        "If a skill is tagged [script], first call `run_skill` to read its instructions. Only call `run_skill_script` when the skill explicitly asks for its declared local script to run.",
+        "Use `run_skill_command` for safe allowlisted inspection/test commands and for running real script files that already exist inside that Skill directory, such as `python scripts/echo.py` or `scripts/echo.py`. It does not run through a shell, does not persist cd, and rejects high-risk syntax/path escapes.",
+        "If a requested script is missing, say the file does not exist and use `list_skill_files`/`search_skill_files` to locate it. Do not claim Python/script execution is unavailable just because a declared path is wrong.",
+        "If a skill is tagged [script], first call `run_skill` to read its instructions. `run_skill_script` runs only the declared local script; `run_skill_command` can run other existing Skill-local script files safely.",
         "",
         "```",
         joined,
@@ -672,9 +691,77 @@ def _command_prefix_allowed(argv: list[str]) -> bool:
         tail = argv[len(prefix):]
         for arg in tail:
             if arg in risky or any(arg.startswith(r + "=") for r in risky):
-                return False
-        return True
+                break
+        else:
+            return True
     return False
+
+
+def _resolve_command_path_arg(skill: dict[str, Any], cwd: Path, arg: str) -> tuple[Path | None, str]:
+    if not arg:
+        return None, "脚本路径不能为空。"
+    if "://" in arg:
+        return None, "脚本路径不能包含 URL。"
+    if arg.startswith(("~", "/")):
+        return None, "脚本路径不能使用绝对路径或 HOME 路径。"
+    path = (cwd / arg).resolve()
+    try:
+        path.relative_to(_skill_root(skill))
+    except ValueError:
+        return None, f"脚本路径不能跳出 Skill 目录：{arg}"
+    if not path.exists() or not path.is_file():
+        return None, f"脚本不存在：{arg}"
+    return path, ""
+
+
+def _local_skill_script_command(skill: dict[str, Any], argv: list[str], cwd: Path) -> tuple[list[str] | None, str]:
+    if not argv:
+        return None, "empty command"
+    first = argv[0]
+    suffix = Path(first).suffix.lower()
+    if suffix not in SKILL_SCRIPT_SUFFIX_RUNTIME:
+        return None, ""
+    script, error = _resolve_command_path_arg(skill, cwd, first)
+    if script is None:
+        return None, error
+    return [*SKILL_SCRIPT_SUFFIX_RUNTIME[suffix], str(script), *argv[1:]], ""
+
+
+def _runner_skill_script_command(skill: dict[str, Any], argv: list[str], cwd: Path) -> tuple[list[str] | None, str]:
+    if not argv:
+        return None, "empty command"
+    runner = argv[0]
+    if runner not in {"python", "python3", "node", "bash", "sh"}:
+        return None, ""
+    if len(argv) >= 2 and argv[1] in {"--version", "-v"}:
+        return argv, ""
+    if len(argv) >= 3 and argv[1] == "-m" and argv[2] == "pytest":
+        return argv, ""
+    script_index = next((idx for idx, arg in enumerate(argv[1:], start=1) if arg and not arg.startswith("-")), 0)
+    if not script_index:
+        return None, f"{runner} 需要指定要运行的 Skill 目录内脚本文件。"
+    script_arg = argv[script_index]
+    suffix = Path(script_arg).suffix.lower()
+    allowed_suffixes = {
+        "python": {".py"},
+        "python3": {".py"},
+        "node": {".js", ".mjs", ".cjs"},
+        "bash": {".sh", ".bash"},
+        "sh": {".sh"},
+    }[runner]
+    if suffix not in allowed_suffixes:
+        return None, f"{runner} 只能运行 {', '.join(sorted(allowed_suffixes))} 脚本文件。"
+    script, error = _resolve_command_path_arg(skill, cwd, script_arg)
+    if script is None:
+        return None, error
+    return [*argv[:script_index], str(script), *argv[script_index + 1:]], ""
+
+
+def _skill_script_command(skill: dict[str, Any], argv: list[str], cwd: Path) -> tuple[list[str] | None, str]:
+    command, error = _runner_skill_script_command(skill, argv, cwd)
+    if command is not None or error:
+        return command, error
+    return _local_skill_script_command(skill, argv, cwd)
 
 
 def _command_paths_stay_in_skill(skill: dict[str, Any], argv: list[str], cwd: Path) -> tuple[bool, str]:
@@ -716,10 +803,19 @@ def run_skill_command_tool(user_id: str, raw_args: dict[str, Any]) -> str:
         argv = shlex.split(command)
     except ValueError as exc:
         return json.dumps({"error": f"命令解析失败：{exc}"}, ensure_ascii=False)
-    if not _command_prefix_allowed(argv):
+    cwd, path_error = _safe_skill_path(skill, str(raw_args.get("cwd") or "."))
+    if cwd is None:
+        return json.dumps({"error": path_error}, ensure_ascii=False)
+    if not cwd.exists() or not cwd.is_dir():
+        return json.dumps({"error": "cwd 不存在或不是目录", "cwd": str(raw_args.get("cwd") or ".")}, ensure_ascii=False)
+    skill_script_argv, script_error = _skill_script_command(skill, argv, cwd)
+    is_allowlisted_command = _command_prefix_allowed(argv)
+    if skill_script_argv is None and script_error:
+        return json.dumps({"error": script_error, "command": command}, ensure_ascii=False)
+    if skill_script_argv is None and not is_allowlisted_command:
         return json.dumps(
             {
-                "error": "命令不在安全 allowlist 中",
+                "error": "命令不在安全 allowlist 中，也不是 Skill 目录内可运行脚本",
                 "command": command,
                 "allowed_examples": [
                     "ls",
@@ -729,15 +825,13 @@ def run_skill_command_tool(user_id: str, raw_args: dict[str, Any]) -> str:
                     "find . -name '*.md'",
                     "python --version",
                     "python -m pytest",
+                    "python scripts/echo.py",
+                    "scripts/echo.py",
                 ],
             },
             ensure_ascii=False,
         )
-    cwd, path_error = _safe_skill_path(skill, str(raw_args.get("cwd") or "."))
-    if cwd is None:
-        return json.dumps({"error": path_error}, ensure_ascii=False)
-    if not cwd.exists() or not cwd.is_dir():
-        return json.dumps({"error": "cwd 不存在或不是目录", "cwd": str(raw_args.get("cwd") or ".")}, ensure_ascii=False)
+    exec_argv = skill_script_argv or argv
     ok, path_error = _command_paths_stay_in_skill(skill, argv, cwd)
     if not ok:
         return json.dumps({"error": path_error}, ensure_ascii=False)
@@ -750,7 +844,7 @@ def run_skill_command_tool(user_id: str, raw_args: dict[str, Any]) -> str:
     }
     try:
         proc = subprocess.run(
-            argv,
+            exec_argv,
             cwd=str(cwd),
             capture_output=True,
             text=True,
@@ -771,6 +865,7 @@ def run_skill_command_tool(user_id: str, raw_args: dict[str, Any]) -> str:
             "skill": skill.get("name"),
             "cwd": _display_skill_rel(skill, cwd),
             "command": command,
+            "executed": " ".join(shlex.quote(part) for part in exec_argv),
             "returncode": proc.returncode,
             "output": _clip(output, MAX_SCRIPT_OUTPUT_CHARS),
         },
@@ -966,7 +1061,7 @@ def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
                 "type": "function",
                 "function": {
                     "name": "run_skill_command",
-                    "description": "Run a safe allowlisted command inside a Skill directory, using shell=false. Use for ls/cat/grep/rg/find/version probes/tests. Use cwd instead of cd. High-risk shell syntax and path escapes are rejected.",
+                    "description": "Run a safe command inside a Skill directory with shell=false. Supports ls/cat/grep/rg/find/version probes/tests and existing Skill-local scripts such as python scripts/echo.py or scripts/echo.py. Use cwd instead of cd. High-risk shell syntax and path escapes are rejected.",
                     "parameters": {
                         "type": "object",
                         "properties": {

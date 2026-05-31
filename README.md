@@ -61,7 +61,7 @@ TablePet 的记忆不是只把历史对话塞进 prompt。
 
 ### Skill
 
-Skill 是本地可安装的能力说明书。Agent 默认只看到 Skill 索引，需要时再通过 `run_skill` 读取正文。若 Skill 明确声明脚本入口，也可以通过 `run_skill_script` 运行本地脚本。
+Skill 是本地可安装的能力说明书。Agent 默认只看到 Skill 索引，需要时再通过 `run_skill` 读取正文。复杂 Skill 可以继续读取目录内文件、搜索内容，并通过 `run_skill_command` 运行 Skill 目录内真实存在的脚本文件。
 
 支持来源：
 
@@ -261,11 +261,11 @@ writer - Help draft and polish short Chinese copy
 | `list_skill_files` | 列出 Skill 目录内的文件 |
 | `read_skill_file` | 读取 Skill 目录内的文本文件，支持 `head` / `tail` / `range` |
 | `search_skill_files` | 在 Skill 目录内搜索文本 |
-| `run_skill_command` | 在 Skill 目录内运行安全 allowlist 命令，比如 `ls`、`cat`、`grep`、`rg`、`find`、`python -m pytest` |
+| `run_skill_command` | 在 Skill 目录内运行安全命令和真实存在的脚本文件，比如 `ls`、`cat`、`grep`、`rg`、`find`、`python scripts/echo.py`、`scripts/echo.py`、`python -m pytest` |
 
-这些工具都会把路径限制在当前 Skill 目录里。`run_skill_command` 使用 `shell=false`，不支持管道、重定向、`&&`、`;`、命令替换或环境变量展开；需要切目录时使用 `cwd` 参数，不依赖持久 `cd`。
+这些工具都会把路径限制在当前 Skill 目录里。`run_skill_command` 使用 `shell=false`，可以运行 Skill 目录内真实存在的 Python/Node/Shell 脚本文件，不要求这些脚本提前写在 `SKILL.md` 的 `script` 字段里；但不支持 `python -c`、`node -e`、管道、重定向、`&&`、`;`、命令替换或环境变量展开；需要切目录时使用 `cwd` 参数，不依赖持久 `cd`。
 
-默认情况下，Skill 只会被读取，不会执行声明脚本。要让 Skill 运行本地脚本，必须在 `SKILL.md` frontmatter 里显式声明：
+如果某个 Skill 想提供一个固定的声明式脚本入口，也可以在 `SKILL.md` frontmatter 里显式声明：
 
 ```markdown
 ---

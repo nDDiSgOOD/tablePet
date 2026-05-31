@@ -358,7 +358,7 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
     try:
         metrics_seen: list[dict[str, int]] = []
         resp = None
-        max_tool_iters = 6
+        max_tool_iters = 12
         for iter_idx in range(max_tool_iters):
             resp = await call_deepseek_messages(
                 messages,
