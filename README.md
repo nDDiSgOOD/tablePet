@@ -254,7 +254,18 @@ writer - Help draft and polish short Chinese copy
 
 ### Script Skills
 
-默认情况下，Skill 只会被读取，不会执行代码。要让 Skill 运行本地脚本，必须在 `SKILL.md` frontmatter 里显式声明：
+复杂 Skill 不止一个 `SKILL.md` 时，Agent 可以继续使用受限工作区工具：
+
+| 工具 | 作用 |
+| --- | --- |
+| `list_skill_files` | 列出 Skill 目录内的文件 |
+| `read_skill_file` | 读取 Skill 目录内的文本文件，支持 `head` / `tail` / `range` |
+| `search_skill_files` | 在 Skill 目录内搜索文本 |
+| `run_skill_command` | 在 Skill 目录内运行安全 allowlist 命令，比如 `ls`、`cat`、`grep`、`rg`、`find`、`python -m pytest` |
+
+这些工具都会把路径限制在当前 Skill 目录里。`run_skill_command` 使用 `shell=false`，不支持管道、重定向、`&&`、`;`、命令替换或环境变量展开；需要切目录时使用 `cwd` 参数，不依赖持久 `cd`。
+
+默认情况下，Skill 只会被读取，不会执行声明脚本。要让 Skill 运行本地脚本，必须在 `SKILL.md` frontmatter 里显式声明：
 
 ```markdown
 ---

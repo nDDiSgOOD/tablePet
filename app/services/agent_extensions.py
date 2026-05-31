@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -18,12 +19,82 @@ MAX_SKILL_CHARS = 12_000
 MAX_TOTAL_CHARS = 32_000
 SKILLS_INDEX_MAX_CHARS = 4000
 MAX_SCRIPT_OUTPUT_CHARS = 12_000
+MAX_SKILL_FILE_CHARS = 20_000
+MAX_SKILL_LIST_CHARS = 16_000
 SKILL_SCRIPT_TIMEOUT_SECONDS = 30
+SKILL_COMMAND_TIMEOUT_SECONDS = 20
 SKILL_FILE = "SKILL.md"
 VALID_SKILL_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 COLLECTION_DIRS = ("skills", ".reasonix/skills")
 SCRIPT_TOOL_NAME = "run_skill_script"
 SCRIPT_RUNTIMES = {"python", "node", "bash", "sh"}
+SKILL_WORKSPACE_TOOL_NAMES = {
+    "list_skill_files",
+    "read_skill_file",
+    "search_skill_files",
+    "run_skill_command",
+}
+SKIP_DIR_NAMES = {
+    ".git",
+    ".hg",
+    ".svn",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    "target",
+    "__MACOSX",
+}
+SKIP_FILE_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".7z",
+    ".mp3",
+    ".mp4",
+    ".mov",
+    ".wav",
+    ".woff",
+    ".woff2",
+    ".ttf",
+}
+SAFE_COMMAND_PREFIXES = (
+    ("ls",),
+    ("pwd",),
+    ("cat",),
+    ("head",),
+    ("tail",),
+    ("wc",),
+    ("file",),
+    ("find",),
+    ("grep",),
+    ("rg",),
+    ("python", "--version"),
+    ("python3", "--version"),
+    ("node", "--version"),
+    ("node", "-v"),
+    ("npm", "--version"),
+    ("npx", "--version"),
+    ("pytest",),
+    ("python", "-m", "pytest"),
+    ("python3", "-m", "pytest"),
+)
+RISKY_COMMAND_ARGS = {
+    "find": {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"},
+    "rg": {"--replace", "-r", "--files-without-match"},
+    "grep": {"--exclude-dir=*", "--include=*"},
+}
+SHELL_METACHARS = re.compile(r"(?:\|\||&&|[|;&`<>]|\$\(|\$\{|\n)")
 
 
 def _clip(text: str, limit: int) -> str:
@@ -206,7 +277,9 @@ def build_skills_index_context(user_id: str) -> str:
         "## Skills - playbooks you can invoke",
         "",
         "Only a short index is pinned here. When a skill matches the user's request, call the `run_skill` tool with the bare skill name and a concise arguments string. The tool will read the local SKILL.md body on demand. Do not copy the [subagent] tag into the name.",
-        "If a skill is tagged [script], first call `run_skill` to read its instructions. Only call `run_skill_script` when the skill explicitly asks for its declared local script to run. Never invent shell commands.",
+        "For multi-file skills, first call `run_skill`, then use `list_skill_files`, `read_skill_file`, or `search_skill_files` to inspect referenced files inside that Skill directory.",
+        "Use `run_skill_command` only for safe allowlisted inspection/test commands inside the Skill directory. It does not run through a shell, does not persist cd, and rejects high-risk syntax.",
+        "If a skill is tagged [script], first call `run_skill` to read its instructions. Only call `run_skill_script` when the skill explicitly asks for its declared local script to run.",
         "",
         "```",
         joined,
@@ -267,6 +340,185 @@ def run_skill_tool(user_id: str, raw_args: dict[str, Any]) -> str:
 def _skill_allows_script(skill: dict[str, Any]) -> bool:
     allowed = {str(t).strip() for t in (skill.get("allowed_tools") or [])}
     return bool(skill.get("script")) and SCRIPT_TOOL_NAME in allowed
+
+
+def _skill_root(skill: dict[str, Any]) -> Path:
+    return Path(str(skill.get("local_path") or "")).expanduser().resolve()
+
+
+def _skill_by_args(user_id: str, raw_args: dict[str, Any], *, tool_name: str) -> tuple[dict[str, Any] | None, str]:
+    raw_name = str(raw_args.get("name") or raw_args.get("skill_name") or "").strip()
+    raw_name = re.sub(r"\[[^\]]*\]", " ", raw_name).strip()
+    name = next((t for t in raw_name.split() if t and t[0].isalnum()), "")
+    if not name:
+        return None, f"{tool_name} requires a skill name"
+    skill = read_skill(user_id, name)
+    if skill is None:
+        available = [s["name"] for s in list_available_skills(user_id)]
+        return None, json.dumps({"error": f"unknown skill: {name}", "available": available}, ensure_ascii=False)
+    return skill, ""
+
+
+def _safe_skill_path(skill: dict[str, Any], raw_path: str = ".") -> tuple[Path | None, str]:
+    root = _skill_root(skill)
+    value = str(raw_path or ".").strip() or "."
+    while value.startswith("/") or value.startswith("\\"):
+        value = value[1:]
+    if value.startswith("~"):
+        return None, "path 必须是 Skill 目录内的相对路径。"
+    target = (root / value).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return None, "path 不能跳出 Skill 目录。"
+    return target, ""
+
+
+def _display_skill_rel(skill: dict[str, Any], path: Path) -> str:
+    try:
+        return str(path.relative_to(_skill_root(skill))).replace("\\", "/") or "."
+    except ValueError:
+        return path.name
+
+
+def _is_probably_binary(path: Path) -> bool:
+    if path.suffix.lower() in SKIP_FILE_SUFFIXES:
+        return True
+    try:
+        with path.open("rb") as fh:
+            chunk = fh.read(2048)
+        return b"\0" in chunk
+    except OSError:
+        return True
+
+
+def _walk_skill_files(skill: dict[str, Any], start: Path, *, include_deps: bool = False, max_depth: int = 5) -> list[Path]:
+    root = _skill_root(skill)
+    files: list[Path] = []
+    if start.is_file():
+        return [start]
+    if not start.exists() or not start.is_dir():
+        return []
+    start_depth = len(start.relative_to(root).parts) if start != root else 0
+    for current, dirs, names in os.walk(start):
+        cur_path = Path(current)
+        depth = len(cur_path.relative_to(root).parts) - start_depth
+        if depth >= max_depth:
+            dirs[:] = []
+        if not include_deps:
+            dirs[:] = [d for d in dirs if d not in SKIP_DIR_NAMES and not d.startswith(".")]
+        for name in sorted(names):
+            path = cur_path / name
+            try:
+                path.relative_to(root)
+            except ValueError:
+                continue
+            files.append(path)
+            if len(files) >= 600:
+                return files
+    return files
+
+
+def list_skill_files_tool(user_id: str, raw_args: dict[str, Any]) -> str:
+    skill, error = _skill_by_args(user_id, raw_args, tool_name="list_skill_files")
+    if skill is None:
+        return error if error.startswith("{") else json.dumps({"error": error}, ensure_ascii=False)
+    path, error = _safe_skill_path(skill, str(raw_args.get("path") or "."))
+    if path is None:
+        return json.dumps({"error": error}, ensure_ascii=False)
+    include_deps = raw_args.get("include_deps") is True
+    max_depth = max(0, min(int(raw_args.get("max_depth") or 2), 8))
+    if path.is_file():
+        return _display_skill_rel(skill, path)
+    if not path.exists() or not path.is_dir():
+        return json.dumps({"error": "目录不存在", "path": str(raw_args.get("path") or ".")}, ensure_ascii=False)
+    root = _skill_root(skill)
+    lines: list[str] = []
+    total = 0
+    for item in _walk_skill_files(skill, path, include_deps=include_deps, max_depth=max_depth):
+        rel = _display_skill_rel(skill, item)
+        line = rel + ("/" if item.is_dir() else "")
+        lines.append(line)
+        total += len(line) + 1
+        if total > MAX_SKILL_LIST_CHARS:
+            lines.append("...[已截断，缩小 path 或 max_depth 后重试]")
+            break
+    if not lines and path == root:
+        return "(empty skill directory)"
+    return "\n".join(lines) or "(empty directory)"
+
+
+def _slice_lines(text: str, raw_args: dict[str, Any]) -> str:
+    lines = text.splitlines()
+    total = len(lines)
+    raw_range = str(raw_args.get("range") or "").strip()
+    if re.fullmatch(r"\d+\s*-\s*\d+", raw_range):
+        start_s, end_s = re.split(r"\s*-\s*", raw_range, maxsplit=1)
+        start = max(1, int(start_s))
+        end = min(total, max(start, int(end_s)))
+        return f"[range {start}-{end} of {total} lines]\n" + "\n".join(lines[start - 1:end])
+    head = raw_args.get("head")
+    tail = raw_args.get("tail")
+    if isinstance(head, int) and head > 0:
+        count = min(head, total)
+        suffix = f"\n\n...[head {count} of {total} lines]" if count < total else ""
+        return "\n".join(lines[:count]) + suffix
+    if isinstance(tail, int) and tail > 0:
+        count = min(tail, total)
+        prefix = f"...[tail {count} of {total} lines]\n\n" if count < total else ""
+        return prefix + "\n".join(lines[-count:])
+    if len(text) > MAX_SKILL_FILE_CHARS:
+        return text[:MAX_SKILL_FILE_CHARS] + "\n...[已截断，请用 head/tail/range 缩小读取范围]"
+    return text
+
+
+def read_skill_file_tool(user_id: str, raw_args: dict[str, Any]) -> str:
+    skill, error = _skill_by_args(user_id, raw_args, tool_name="read_skill_file")
+    if skill is None:
+        return error if error.startswith("{") else json.dumps({"error": error}, ensure_ascii=False)
+    path, error = _safe_skill_path(skill, str(raw_args.get("path") or ""))
+    if path is None:
+        return json.dumps({"error": error}, ensure_ascii=False)
+    if not path.exists() or not path.is_file():
+        return json.dumps({"error": "文件不存在", "path": str(raw_args.get("path") or "")}, ensure_ascii=False)
+    if _is_probably_binary(path):
+        return json.dumps({"error": "拒绝读取二进制文件", "path": _display_skill_rel(skill, path)}, ensure_ascii=False)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return json.dumps({"error": "文件不是 UTF-8 文本", "path": _display_skill_rel(skill, path)}, ensure_ascii=False)
+    return _slice_lines(text, raw_args)
+
+
+def search_skill_files_tool(user_id: str, raw_args: dict[str, Any]) -> str:
+    skill, error = _skill_by_args(user_id, raw_args, tool_name="search_skill_files")
+    if skill is None:
+        return error if error.startswith("{") else json.dumps({"error": error}, ensure_ascii=False)
+    pattern = str(raw_args.get("pattern") or "").strip()
+    if not pattern:
+        return json.dumps({"error": "search_skill_files requires pattern"}, ensure_ascii=False)
+    path, error = _safe_skill_path(skill, str(raw_args.get("path") or "."))
+    if path is None:
+        return json.dumps({"error": error}, ensure_ascii=False)
+    include_deps = raw_args.get("include_deps") is True
+    case_sensitive = raw_args.get("case_sensitive") is True
+    needle = pattern if case_sensitive else pattern.lower()
+    lines: list[str] = []
+    for file_path in _walk_skill_files(skill, path, include_deps=include_deps, max_depth=8):
+        if not file_path.is_file() or _is_probably_binary(file_path):
+            continue
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for idx, line in enumerate(content.splitlines(), start=1):
+            haystack = line if case_sensitive else line.lower()
+            if needle in haystack:
+                lines.append(f"{_display_skill_rel(skill, file_path)}:{idx}: {line[:240]}")
+                if len("\n".join(lines)) > MAX_SKILL_LIST_CHARS:
+                    lines.append("...[已截断，缩小 path 或 pattern 后重试]")
+                    return "\n".join(lines)
+    return "\n".join(lines) or "(no matches)"
 
 
 def _resolve_skill_script(skill: dict[str, Any]) -> tuple[Path, str] | tuple[None, str]:
@@ -408,6 +660,124 @@ def run_skill_script_tool(user_id: str, raw_args: dict[str, Any]) -> str:
     )
 
 
+def _command_prefix_allowed(argv: list[str]) -> bool:
+    if not argv:
+        return False
+    for prefix in SAFE_COMMAND_PREFIXES:
+        if len(argv) < len(prefix):
+            continue
+        if tuple(argv[:len(prefix)]) != prefix:
+            continue
+        risky = RISKY_COMMAND_ARGS.get(prefix[0], set())
+        tail = argv[len(prefix):]
+        for arg in tail:
+            if arg in risky or any(arg.startswith(r + "=") for r in risky):
+                return False
+        return True
+    return False
+
+
+def _command_paths_stay_in_skill(skill: dict[str, Any], argv: list[str], cwd: Path) -> tuple[bool, str]:
+    root = _skill_root(skill)
+    for arg in argv[1:]:
+        if not arg or arg.startswith("-"):
+            continue
+        if "://" in arg:
+            return False, "命令参数不能包含 URL。"
+        if arg.startswith(("~", "/")):
+            return False, "命令参数不能使用绝对路径或 HOME 路径。"
+        # Only path-like arguments need sandbox resolution.
+        if "/" not in arg and "\\" not in arg and arg not in {".", ".."}:
+            continue
+        candidate = (cwd / arg).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            return False, f"命令参数不能跳出 Skill 目录：{arg}"
+    return True, ""
+
+
+def run_skill_command_tool(user_id: str, raw_args: dict[str, Any]) -> str:
+    skill, error = _skill_by_args(user_id, raw_args, tool_name="run_skill_command")
+    if skill is None:
+        return error if error.startswith("{") else json.dumps({"error": error}, ensure_ascii=False)
+    command = str(raw_args.get("command") or "").strip()
+    if not command:
+        return json.dumps({"error": "run_skill_command requires command"}, ensure_ascii=False)
+    if SHELL_METACHARS.search(command):
+        return json.dumps(
+            {
+                "error": "命令包含不支持或高危 shell 语法",
+                "hint": "不要使用管道、重定向、&&、;、反引号、命令替换或环境变量展开。需要切目录时使用 cwd 参数。",
+            },
+            ensure_ascii=False,
+        )
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:
+        return json.dumps({"error": f"命令解析失败：{exc}"}, ensure_ascii=False)
+    if not _command_prefix_allowed(argv):
+        return json.dumps(
+            {
+                "error": "命令不在安全 allowlist 中",
+                "command": command,
+                "allowed_examples": [
+                    "ls",
+                    "cat README.md",
+                    "grep pattern file.txt",
+                    "rg pattern",
+                    "find . -name '*.md'",
+                    "python --version",
+                    "python -m pytest",
+                ],
+            },
+            ensure_ascii=False,
+        )
+    cwd, path_error = _safe_skill_path(skill, str(raw_args.get("cwd") or "."))
+    if cwd is None:
+        return json.dumps({"error": path_error}, ensure_ascii=False)
+    if not cwd.exists() or not cwd.is_dir():
+        return json.dumps({"error": "cwd 不存在或不是目录", "cwd": str(raw_args.get("cwd") or ".")}, ensure_ascii=False)
+    ok, path_error = _command_paths_stay_in_skill(skill, argv, cwd)
+    if not ok:
+        return json.dumps({"error": path_error}, ensure_ascii=False)
+    timeout = max(1, min(int(raw_args.get("timeout_seconds") or SKILL_COMMAND_TIMEOUT_SECONDS), 60))
+    env = {
+        "PATH": os.getenv("PATH", ""),
+        "HOME": str(_skill_root(skill)),
+        "TABLEPET_SKILL_NAME": str(skill.get("name") or ""),
+        "TABLEPET_SKILL_DIR": str(_skill_root(skill)),
+    }
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return json.dumps({"error": "Skill 命令执行超时", "timeout_seconds": timeout}, ensure_ascii=False)
+    except FileNotFoundError:
+        return json.dumps({"error": f"命令不存在：{argv[0]}"}, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"error": f"Skill 命令启动失败：{exc}"}, ensure_ascii=False)
+    output = "\n".join(part for part in (proc.stdout, proc.stderr) if part)
+    return json.dumps(
+        {
+            "ok": proc.returncode == 0,
+            "skill": skill.get("name"),
+            "cwd": _display_skill_rel(skill, cwd),
+            "command": command,
+            "returncode": proc.returncode,
+            "output": _clip(output, MAX_SCRIPT_OUTPUT_CHARS),
+        },
+        ensure_ascii=False,
+    )
+
+
 def _mcp_spec_for_item(item: dict[str, Any]) -> str:
     config = item.get("config") or {}
     name = str(item.get("name") or "").strip()
@@ -538,6 +908,78 @@ def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
     skill_tool = skill_tool_spec(user_id)
     if skill_tool:
         tools.append(skill_tool)
+        tools.extend([
+            {
+                "type": "function",
+                "function": {
+                    "name": "list_skill_files",
+                    "description": "List files inside an installed Skill directory. Paths are relative to the Skill root and cannot escape it.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Bare Skill identifier from the Skills index."},
+                            "path": {"type": "string", "description": "Relative directory path inside the Skill. Defaults to root."},
+                            "max_depth": {"type": "integer", "description": "Max traversal depth. Defaults to 2."},
+                            "include_deps": {"type": "boolean", "description": "Include dependency/build/hidden directories. Default false."},
+                        },
+                        "required": ["name"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_skill_file",
+                    "description": "Read a text file inside an installed Skill directory. Prefer head/tail/range for large files.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Bare Skill identifier from the Skills index."},
+                            "path": {"type": "string", "description": "Relative file path inside the Skill."},
+                            "head": {"type": "integer", "description": "Return first N lines."},
+                            "tail": {"type": "integer", "description": "Return last N lines."},
+                            "range": {"type": "string", "description": "Inclusive 1-indexed line range, for example 20-80."},
+                        },
+                        "required": ["name", "path"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_skill_files",
+                    "description": "Search text content inside files in an installed Skill directory. Returns path:line: text matches.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Bare Skill identifier from the Skills index."},
+                            "pattern": {"type": "string", "description": "Literal text to search for."},
+                            "path": {"type": "string", "description": "Relative directory or file path to search. Defaults to root."},
+                            "case_sensitive": {"type": "boolean", "description": "Match case exactly. Default false."},
+                            "include_deps": {"type": "boolean", "description": "Search dependency/build/hidden directories. Default false."},
+                        },
+                        "required": ["name", "pattern"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "run_skill_command",
+                    "description": "Run a safe allowlisted command inside a Skill directory, using shell=false. Use for ls/cat/grep/rg/find/version probes/tests. Use cwd instead of cd. High-risk shell syntax and path escapes are rejected.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Bare Skill identifier from the Skills index."},
+                            "command": {"type": "string", "description": "Command line without pipes, redirects, &&, ;, command substitution, or env expansion."},
+                            "cwd": {"type": "string", "description": "Relative working directory inside the Skill. Defaults to root."},
+                            "timeout_seconds": {"type": "integer", "description": "1-60 seconds. Defaults to 20."},
+                        },
+                        "required": ["name", "command"],
+                    },
+                },
+            },
+        ])
     if any(_skill_allows_script(skill) for skill in list_available_skills(user_id)):
         tools.append({
             "type": "function",
@@ -614,6 +1056,14 @@ def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
 async def dispatch_agent_tool(user_id: str, name: str, arguments: dict[str, Any]) -> str:
     if name == "run_skill":
         return run_skill_tool(user_id, arguments)
+    if name == "list_skill_files":
+        return list_skill_files_tool(user_id, arguments)
+    if name == "read_skill_file":
+        return read_skill_file_tool(user_id, arguments)
+    if name == "search_skill_files":
+        return search_skill_files_tool(user_id, arguments)
+    if name == "run_skill_command":
+        return run_skill_command_tool(user_id, arguments)
     if name == SCRIPT_TOOL_NAME:
         return run_skill_script_tool(user_id, arguments)
     if name == "local_music_control":
