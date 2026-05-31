@@ -1452,6 +1452,16 @@
       border-bottom-left-radius:6px;
       box-shadow:var(--shadow-card);
     }
+    .msg.msg-thinking .bubble {
+      color:var(--text-soft);
+    }
+    .chat-progress {
+      display:block;
+      margin-top:4px;
+      font-size:var(--fs-xs);
+      color:var(--muted);
+      line-height:1.45;
+    }
     /* 系统/错误/提示 */
     .msg.msg-system .bubble, .msg.system .bubble {
       background:var(--warn-soft);
@@ -4666,6 +4676,31 @@ function appendMsg(role, text) {
   $('chatLog').appendChild(el);
   $('chatLog').scrollTop = $('chatLog').scrollHeight;
 }
+function appendThinkingMsg() {
+  const el = document.createElement('div');
+  el.className = 'msg msg-assistant assistant msg-thinking';
+  el.innerHTML = '<div class="who" aria-hidden="true"></div><div class="bubble"><span class="chat-main">思考中...</span><span class="chat-progress">正在整理上下文</span></div>';
+  _renderWhoAvatar(el.querySelector('.who'), false);
+  $('chatLog').appendChild(el);
+  $('chatLog').scrollTop = $('chatLog').scrollHeight;
+  const steps = ['正在整理上下文', '正在检查可用 Skill / MCP 工具', '如果需要会调用工具', '正在等待模型最终回复'];
+  let idx = 0;
+  const progress = el.querySelector('.chat-progress');
+  const timer = setInterval(() => {
+    idx = Math.min(idx + 1, steps.length - 1);
+    if (progress) progress.textContent = steps[idx];
+  }, 1400);
+  return {
+    el,
+    finish(text) {
+      clearInterval(timer);
+      el.classList.remove('msg-thinking');
+      const bubble = el.querySelector('.bubble');
+      if (bubble) bubble.textContent = text;
+      $('chatLog').scrollTop = $('chatLog').scrollHeight;
+    },
+  };
+}
 function syncDeviceChat(d) {
   if (!d || location.hash.slice(1) !== 'chat') return;
   if (d.last_asr_text) {
@@ -4694,13 +4729,14 @@ async function sendChat() {
   if (!text) return;
   $('chatInput').value = '';
   appendMsg('user', text);
+  const thinking = appendThinkingMsg();
   try {
     const data = await api('POST', '/chat', {
       text,
       device_id: currentChatDeviceId(),
     });
     const reply = data.reply || '...';
-    appendMsg('assistant', reply);
+    thinking.finish(reply);
     if ($('chatTtsToggle').checked) {
       // 标记"这条 reply web 已经显示过"，等会 syncDeviceChat 看到 last_tts_text
       // 与之相同时会跳过一次 appendMsg，避免重复气泡。
@@ -4717,14 +4753,14 @@ async function sendChat() {
   } catch (err) {
     const msg = err.message || '';
     if (/500/.test(msg) || /API Key/i.test(msg)) {
-      appendMsg('assistant', '⚠️ 还没配置 LLM 账号，没法回话呢～点这里去「账户情况」配置 →');
-      const last = $('chatLog').lastElementChild;
+      thinking.finish('⚠️ 还没配置 LLM 账号，没法回话呢～点这里去「账户情况」配置 →');
+      const last = thinking.el;
       if (last) {
         last.style.cursor = 'pointer';
         last.addEventListener('click', () => { location.hash = '#account'; });
       }
     } else {
-      appendMsg('assistant', '⚠️ 网关返回错误：' + msg);
+      thinking.finish('⚠️ 网关返回错误：' + msg);
     }
   }
 }

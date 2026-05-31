@@ -178,6 +178,80 @@ async def node_tool_call(state: AgentState) -> dict[str, Any]:
     }
 
 
+def _strip_tool_markup(text: str) -> str:
+    """去掉模型误当正文输出的 DSML/tool_calls 包裹，避免暴露给用户。"""
+    import re as _re
+
+    if not text:
+        return text
+    s = text
+    # DeepSeek/R1 偶发把工具调用以 DSML 文本输出。支持半角/全角竖线和 tool/function 两种命名。
+    s = _re.sub(r"<[｜|]{1,2}DSML[｜|]{1,2}(?:tool_calls|function_calls)>[\s\S]*?</[｜|]{1,2}DSML[｜|]{1,2}(?:tool_calls|function_calls)>", "", s)
+    s = _re.sub(r"<(?:tool_calls|function_calls)>[\s\S]*?</(?:tool_calls|function_calls)>", "", s)
+    s = _re.sub(r"<[｜|]{1,2}DSML[｜|]{1,2}[\s\S]*$", "", s)
+    return s.strip()
+
+
+def _response_with_content(response: Any, content: str) -> Any:
+    """复制响应并替换 message.content，避免后续 extract_text 读到工具标记。"""
+    import copy as _copy
+
+    if not isinstance(response, dict):
+        return response
+    out = _copy.deepcopy(response)
+    try:
+        choices = out.get("choices") or []
+        if choices:
+            msg = choices[0].setdefault("message", {})
+            msg["content"] = content
+    except Exception:
+        return response
+    return out
+
+
+def _parse_textual_tool_calls(content: str) -> list[dict[str, Any]]:
+    """把 DeepSeek 偶发输出的 DSML 文本工具调用转成 OpenAI-compatible tool_calls。"""
+    import html as _html
+    import json as _json
+    import re as _re
+
+    if not content or "invoke" not in content or "parameter" not in content:
+        return []
+    calls: list[dict[str, Any]] = []
+    invoke_re = _re.compile(r"<[^>]*invoke\s+name=[\"']([^\"']+)[\"'][^>]*>([\s\S]*?)</[^>]*invoke>", _re.I)
+    param_re = _re.compile(
+        r"<[^>]*parameter\s+name=[\"']([^\"']+)[\"'](?:\s+string=[\"'](true|false)[\"'])?[^>]*>([\s\S]*?)</[^>]*parameter>",
+        _re.I,
+    )
+    for idx, match in enumerate(invoke_re.finditer(content)):
+        name = _html.unescape(match.group(1)).strip()
+        if not name:
+            continue
+        args: dict[str, Any] = {}
+        for param in param_re.finditer(match.group(2)):
+            key = _html.unescape(param.group(1)).strip()
+            raw = _html.unescape(param.group(3)).strip()
+            is_string = (param.group(2) or "").lower() == "true"
+            if not key:
+                continue
+            if is_string:
+                args[key] = raw
+                continue
+            try:
+                args[key] = _json.loads(raw) if raw else None
+            except Exception:
+                args[key] = raw
+        calls.append({
+            "id": f"textual_tool_call_{idx}",
+            "type": "function",
+            "function": {
+                "name": name,
+                "arguments": _json.dumps(args, ensure_ascii=False),
+            },
+        })
+    return calls
+
+
 async def node_llm(state: AgentState) -> dict[str, Any]:
     """构造 prompt 并调用主对话模型 / Build prompt then call chat LLM."""
     from ..services.chat import call_deepseek_messages, extract_text, extract_metrics
@@ -263,18 +337,34 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
 
     started = _time.perf_counter()
     try:
-        resp = await call_deepseek_messages(
-            messages,
-            max_tokens=600,
-            user_id=user_id,
-            purpose="chat",
-            session_id=None,  # 这里还不知道 turn 写到哪个 session，下面 save 节点统一处理
-            tools=agent_tools,
-        )
-        choices = (resp or {}).get("choices") if isinstance(resp, dict) else []
-        msg = ((choices[0] or {}).get("message") if choices else {}) or {}
-        tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else None
-        if agent_tools and isinstance(tool_calls, list) and tool_calls:
+        metrics_seen: list[dict[str, int]] = []
+        resp = None
+        max_tool_iters = 6
+        for iter_idx in range(max_tool_iters):
+            resp = await call_deepseek_messages(
+                messages,
+                max_tokens=700,
+                user_id=user_id,
+                purpose="chat",
+                session_id=None,  # 这里还不知道 turn 写到哪个 session，下面 save 节点统一处理
+                tools=agent_tools or None,
+            )
+            metrics_seen.append(extract_metrics(resp))
+            choices = (resp or {}).get("choices") if isinstance(resp, dict) else []
+            msg = ((choices[0] or {}).get("message") if choices else {}) or {}
+            raw_content = str(msg.get("content") or "") if isinstance(msg, dict) else ""
+            visible_content = _strip_tool_markup(raw_content)
+            tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else None
+            if not isinstance(tool_calls, list):
+                tool_calls = []
+            # 有些 DeepSeek/R1 兼容端会把工具调用以 DSML 文本塞进 content，而不是返回原生 tool_calls。
+            # 后端把它修复成真实 tool call，避免工具调用文本直接出现在聊天气泡里。
+            if agent_tools and not tool_calls:
+                tool_calls = _parse_textual_tool_calls(raw_content)
+            if not agent_tools or not tool_calls:
+                resp = _response_with_content(resp, visible_content)
+                break
+
             tool_messages = []
             for call in tool_calls[:3]:
                 fn = (call.get("function") or {}) if isinstance(call, dict) else {}
@@ -290,27 +380,35 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
                 tool_messages.append({
                     "role": "tool",
                     "tool_call_id": call.get("id") or name,
+                    "name": name,
                     "content": result,
                 })
             messages = [
                 *messages,
                 {
                     "role": "assistant",
-                    "content": msg.get("content") or "",
+                    "content": visible_content,
                     "tool_calls": tool_calls,
                 },
                 *tool_messages,
             ]
-            follow = await call_deepseek_messages(
-                messages,
-                max_tokens=700,
-                user_id=user_id,
-                purpose="chat",
-                session_id=None,
-            )
-            first_metrics = extract_metrics(resp)
-            second_metrics = extract_metrics(follow)
-            resp = follow
+            if iter_idx == max_tool_iters - 1:
+                messages.append({
+                    "role": "user",
+                    "content": "工具调用轮次已到上限。请不要再调用工具，直接基于已有工具结果给用户一个简短结论；如果失败，说明还缺哪些具体参数。",
+                })
+                resp = await call_deepseek_messages(
+                    messages,
+                    max_tokens=500,
+                    user_id=user_id,
+                    purpose="chat",
+                    session_id=None,
+                    tools=None,
+                )
+                metrics_seen.append(extract_metrics(resp))
+                final_choices = (resp or {}).get("choices") if isinstance(resp, dict) else []
+                final_msg = ((final_choices[0] or {}).get("message") if final_choices else {}) or {}
+                resp = _response_with_content(resp, _strip_tool_markup(str(final_msg.get("content") or "")))
     except Exception as exc:
         elapsed = int((_time.perf_counter() - started) * 1000)
         return {
@@ -321,13 +419,14 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
         }
 
     elapsed = int((_time.perf_counter() - started) * 1000)
-    metrics = extract_metrics(resp)
-    if "first_metrics" in locals() and "second_metrics" in locals():
+    if "metrics_seen" in locals() and metrics_seen:
         metrics = {
-            "prompt_tokens": first_metrics["prompt_tokens"] + second_metrics["prompt_tokens"],
-            "completion_tokens": first_metrics["completion_tokens"] + second_metrics["completion_tokens"],
-            "total_tokens": first_metrics["total_tokens"] + second_metrics["total_tokens"],
+            "prompt_tokens": sum(m["prompt_tokens"] for m in metrics_seen),
+            "completion_tokens": sum(m["completion_tokens"] for m in metrics_seen),
+            "total_tokens": sum(m["total_tokens"] for m in metrics_seen),
         }
+    else:
+        metrics = extract_metrics(resp)
     return {
         "messages": messages,
         "raw_model_output": resp,

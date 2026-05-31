@@ -265,6 +265,59 @@ def _mcp_spec_for_item(item: dict[str, Any]) -> str:
     return ""
 
 
+def _schema_type(schema: Any) -> str:
+    if not isinstance(schema, dict):
+        return "string"
+    raw = schema.get("type")
+    if isinstance(raw, list):
+        return str(raw[0] or "string")
+    if raw:
+        return str(raw)
+    if schema.get("enum"):
+        return "string"
+    if isinstance(schema.get("properties"), dict):
+        return "object"
+    return "string"
+
+
+def _schema_param_lines(tool: dict[str, Any], *, limit: int = 12) -> list[str]:
+    schema = tool.get("input_schema") or tool.get("inputSchema") or {}
+    if not isinstance(schema, dict):
+        return []
+    properties = schema.get("properties") or {}
+    if not isinstance(properties, dict) or not properties:
+        return []
+    required = {str(v) for v in (schema.get("required") or []) if str(v)}
+    lines: list[str] = []
+    for name, prop in list(properties.items())[:limit]:
+        if not isinstance(prop, dict):
+            prop = {}
+        desc = str(prop.get("description") or prop.get("title") or "").replace("\n", " ").strip()
+        enum = prop.get("enum")
+        enum_hint = ""
+        if isinstance(enum, list) and enum:
+            enum_hint = " enum=" + ",".join(str(v) for v in enum[:6])
+        required_hint = "required" if str(name) in required else "optional"
+        line = f"    - {name}: {_schema_type(prop)}, {required_hint}{enum_hint}"
+        if desc:
+            line += f" - {desc[:180]}"
+        lines.append(line)
+    if len(properties) > limit:
+        lines.append(f"    - ... {len(properties) - limit} more parameters")
+    return lines
+
+
+def _tool_schema_for_name(server: dict[str, Any], tool_name: str) -> dict[str, Any]:
+    tools = (server.get("config") or {}).get("tools") or []
+    if not isinstance(tools, list):
+        return {}
+    for tool in tools:
+        if isinstance(tool, dict) and str(tool.get("name") or "") == tool_name:
+            schema = tool.get("input_schema") or tool.get("inputSchema") or {}
+            return schema if isinstance(schema, dict) else {}
+    return {}
+
+
 def build_mcp_index_context(user_id: str) -> str:
     servers = list_enabled_extensions(user_id, "mcp")
     if not servers:
@@ -273,6 +326,7 @@ def build_mcp_index_context(user_id: str) -> str:
         "## MCP servers",
         "",
         "Configured MCP servers are listed here with discovered tools. When a user asks for a capability provided by an MCP tool, call `call_mcp_tool` with server_id, tool_name, and arguments.",
+        "The `arguments` object must follow each tool's parameter schema below. Never omit required parameters; if a required value is unknown, ask the user a brief clarification instead of calling the tool.",
     ]
     for item in servers:
         spec = _mcp_spec_for_item(item)
@@ -292,6 +346,7 @@ def build_mcp_index_context(user_id: str) -> str:
                     continue
                 t_desc = str(tool.get("description") or "").replace("\n", " ").strip()
                 lines.append(f"  - tool: {t_name}" + (f" - {t_desc[:160]}" if t_desc else ""))
+                lines.extend(_schema_param_lines(tool))
         elif config.get("last_error"):
             lines.append(f"  - tool discovery error: {str(config.get('last_error'))[:180]}")
     return "\n".join(lines) if len(lines) > 3 else ""
@@ -321,9 +376,9 @@ def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
                     "properties": {
                         "server_id": {"type": "integer", "description": "MCP server id shown in the MCP servers index."},
                         "tool_name": {"type": "string", "description": "Exact MCP tool name."},
-                        "arguments": {"type": "object", "description": "Tool arguments matching the discovered input schema."},
+                        "arguments": {"type": "object", "description": "Tool arguments matching the discovered input schema. Include every required parameter listed in the MCP servers index."},
                     },
-                    "required": ["server_id", "tool_name"],
+                    "required": ["server_id", "tool_name", "arguments"],
                 },
             },
         })
@@ -343,7 +398,23 @@ async def dispatch_agent_tool(user_id: str, name: str, arguments: dict[str, Any]
             server = get_extension(user_id, server_id, "mcp")
             if server is None:
                 return json.dumps({"error": f"unknown MCP server_id: {server_id}"}, ensure_ascii=False)
-            result = await _call_mcp_tool(server.get("config") or {}, tool_name, arguments.get("arguments") or {})
+            tool_args = arguments.get("arguments") or {}
+            if not isinstance(tool_args, dict):
+                return json.dumps({"error": "call_mcp_tool.arguments must be an object"}, ensure_ascii=False)
+            schema = _tool_schema_for_name(server, tool_name)
+            required = [str(v) for v in (schema.get("required") or []) if str(v)] if schema else []
+            missing = [name for name in required if name not in tool_args or tool_args.get(name) in (None, "")]
+            if missing:
+                return json.dumps(
+                    {
+                        "error": "missing required MCP arguments",
+                        "tool_name": tool_name,
+                        "missing": missing,
+                        "hint": "Ask the user for these values before calling the tool again.",
+                    },
+                    ensure_ascii=False,
+                )
+            result = await _call_mcp_tool(server.get("config") or {}, tool_name, tool_args)
             return json.dumps({"result": result}, ensure_ascii=False)
         except Exception as exc:
             return json.dumps({"error": str(getattr(exc, "detail", exc))[:500]}, ensure_ascii=False)
