@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from ..memory import DEFAULT_USER_ID
 from ..services.personas import (
@@ -26,6 +28,31 @@ from ..storage import get_setting, set_setting
 router = APIRouter()
 
 PERSONA_KEY = "pet_persona_mode"
+logger = logging.getLogger(__name__)
+
+
+async def _summarize_persona_switch(
+    *,
+    user_id: str,
+    previous_label: str,
+    effective_label: str,
+) -> None:
+    try:
+        from ..services.memory_summarizer import close_session_with_summary
+        from ..storage import append_system_event
+
+        await close_session_with_summary(user_id)
+        append_system_event(
+            user_id,
+            (
+                "[系统事件 · 人格切换] 主人刚把桌宠人格从"
+                f"「{previous_label}」切换为「{effective_label}」。"
+                "从下一句开始必须立刻使用新人格的说话方式；旧会话中的 assistant 语气、"
+                "口头禅、自称和称呼习惯全部只当历史记录，不再作为当前风格参考。"
+            ),
+        )
+    except Exception:
+        logger.exception("persona switch background summary failed")
 
 
 @router.get("/api/personas")
@@ -61,7 +88,7 @@ async def api_list_personas() -> dict[str, Any]:
 
 
 @router.put("/api/personas/active")
-async def api_set_persona(payload: dict[str, Any]) -> dict[str, Any]:
+async def api_set_persona(payload: dict[str, Any], background_tasks: BackgroundTasks) -> dict[str, Any]:
     """切换人格。请求体 ``{"mode": "<persona_id> | random"}``."""
     mode = str(payload.get("mode") or "").strip().lower()
     if mode != RANDOM_MODE and mode not in PERSONAS:
@@ -69,29 +96,21 @@ async def api_set_persona(payload: dict[str, Any]) -> dict[str, Any]:
     previous_mode = get_setting(DEFAULT_USER_ID, PERSONA_KEY) or DEFAULT_MODE
     set_setting(DEFAULT_USER_ID, PERSONA_KEY, mode)
     effective = resolve_active_persona(mode)
-    rotated_session = None
+    rotation_pending = False
     if previous_mode != mode:
-        try:
-            from ..services.memory_summarizer import close_session_with_summary
-            from ..storage import append_system_event
-
-            previous = resolve_active_persona(previous_mode)
-            rotated_session = await close_session_with_summary(DEFAULT_USER_ID)
-            append_system_event(
-                DEFAULT_USER_ID,
-                (
-                    "[系统事件 · 人格切换] 主人刚把桌宠人格从"
-                    f"「{previous.get('label', previous_mode)}」切换为「{effective['label']}」。"
-                    "从下一句开始必须立刻使用新人格的说话方式；旧会话中的 assistant 语气、"
-                    "口头禅、自称和称呼习惯全部只当历史记录，不再作为当前风格参考。"
-                ),
-            )
-        except Exception:
-            rotated_session = None
+        previous = resolve_active_persona(previous_mode)
+        background_tasks.add_task(
+            _summarize_persona_switch,
+            user_id=DEFAULT_USER_ID,
+            previous_label=previous.get("label", previous_mode),
+            effective_label=effective["label"],
+        )
+        rotation_pending = True
     return {
         "ok": True,
         "mode": mode,
-        "rotated_session": rotated_session,
+        "rotated_session": None,
+        "rotation_pending": rotation_pending,
         "effective": {
             "id": effective["id"],
             "label": effective["label"],
