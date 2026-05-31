@@ -14,6 +14,7 @@ MAX_TOTAL_CHARS = 32_000
 SKILLS_INDEX_MAX_CHARS = 4000
 SKILL_FILE = "SKILL.md"
 VALID_SKILL_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
+COLLECTION_DIRS = ("skills", ".reasonix/skills")
 
 
 def _clip(text: str, limit: int) -> str:
@@ -53,37 +54,68 @@ def _safe_skill_name(raw: str) -> str:
     return name[:64]
 
 
-def _skill_file_for_item(item: dict[str, Any]) -> Path | None:
+def _skill_roots(root: Path) -> list[Path]:
+    roots = [root]
+    for rel in COLLECTION_DIRS:
+        candidate = root / rel
+        if candidate.exists() and candidate.is_dir():
+            roots.append(candidate)
+    return roots
+
+
+def _skill_files_for_root(root: Path, item_name: str = "") -> list[Path]:
+    if root.is_file():
+        return [root] if root.suffix.lower() == ".md" else []
+    if not root.exists() or not root.is_dir():
+        return []
+    files: list[Path] = []
+    seen: set[Path] = set()
+
+    def add(path: Path) -> None:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            return
+        if resolved in seen or not path.exists() or not path.is_file():
+            return
+        seen.add(resolved)
+        files.append(path)
+
+    roots = _skill_roots(root)
+    has_collection_root = len(roots) > 1
+    for base in roots:
+        add(base / SKILL_FILE)
+        if item_name:
+            add(base / f"{_safe_skill_name(item_name)}.md")
+        # 仓库根目录常有 README/THIRD_PARTY_NOTICES；有 skills/ 集合目录时
+        # 不把根目录普通 md 当 skill，避免误注册说明/版权文件。
+        if not (has_collection_root and base == root):
+            for path in sorted(base.glob("*.md")):
+                if path.is_file() and not path.name.startswith("."):
+                    add(path)
+        for child in sorted(base.iterdir()):
+            if child.is_dir() and VALID_SKILL_NAME.match(child.name):
+                add(child / SKILL_FILE)
+    return files
+
+
+def _skill_files_for_item(item: dict[str, Any]) -> list[Path]:
     config = item.get("config") or {}
     local_path = config.get("local_path") or item.get("source_uri")
     if not local_path:
-        return None
+        return []
     root = Path(str(local_path)).expanduser()
-    if root.is_file():
-        return root
-    if not root.exists() or not root.is_dir():
-        return None
-    preferred = root / SKILL_FILE
-    if preferred.exists() and preferred.is_file():
-        return preferred
-    flat = root / f"{_safe_skill_name(str(item.get('name') or root.name))}.md"
-    if flat.exists() and flat.is_file():
-        return flat
-    for path in sorted(root.glob("*.md")):
-        if path.is_file() and not path.name.startswith("."):
-            return path
-    return None
+    return _skill_files_for_root(root, str(item.get("name") or ""))
 
 
-def _parse_skill_item(item: dict[str, Any]) -> dict[str, Any] | None:
-    path = _skill_file_for_item(item)
-    if path is None:
-        return None
+def _parse_skill_file(item: dict[str, Any], path: Path) -> dict[str, Any] | None:
     raw = _read_text(path)
     if not raw.strip():
         return None
     data, body = _parse_frontmatter(raw)
-    fallback_name = str(item.get("name") or path.parent.name or path.stem)
+    fallback_name = path.parent.name if path.name == SKILL_FILE else path.stem
+    if fallback_name in {"skills", ".reasonix"}:
+        fallback_name = str(item.get("name") or path.stem)
     name = data.get("name", "").strip()
     if not VALID_SKILL_NAME.match(name):
         name = _safe_skill_name(fallback_name)
@@ -98,18 +130,37 @@ def _parse_skill_item(item: dict[str, Any]) -> dict[str, Any] | None:
         "path": str(path),
         "source_type": item.get("source_type") or "",
         "source_uri": item.get("source_uri") or "",
+        "id": item.get("id"),
+        "enabled": item.get("enabled", True),
+        "local_path": str(path.parent),
     }
+
+
+def parse_skill_extensions(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    parsed: list[dict[str, Any]] = []
+    seen: set[tuple[Any, str]] = set()
+    for item in items:
+        for path in _skill_files_for_item(item):
+            skill = _parse_skill_file(item, path)
+            if not skill:
+                continue
+            key = (item.get("id"), skill["name"])
+            if key in seen:
+                continue
+            seen.add(key)
+            parsed.append(skill)
+    return sorted(parsed, key=lambda s: str(s.get("name") or ""))
 
 
 def list_available_skills(user_id: str) -> list[dict[str, Any]]:
     skills: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in list_enabled_extensions(user_id, "skill"):
-        parsed = _parse_skill_item(item)
-        if not parsed or parsed["name"] in seen:
-            continue
-        seen.add(parsed["name"])
-        skills.append(parsed)
+        for parsed in parse_skill_extensions([item]):
+            if parsed["name"] in seen:
+                continue
+            seen.add(parsed["name"])
+            skills.append(parsed)
     return sorted(skills, key=lambda s: s["name"])
 
 

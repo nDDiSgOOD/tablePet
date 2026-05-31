@@ -26,6 +26,7 @@ from ..storage.agent_extension import (
     set_extension_enabled,
     upsert_extension,
 )
+from ..services.agent_extensions import parse_skill_extensions
 
 router = APIRouter(prefix="/api")
 
@@ -126,34 +127,19 @@ def _unique_skill_dir(name: str) -> Path:
     return target
 
 
-def _find_skill_file(root: Path, name: str) -> Path | None:
-    candidates = [root / "SKILL.md", root / f"{_slug_name(name)}.md"]
-    candidates.extend(sorted(root.glob("*.md")))
-    for path in candidates:
-        if path.exists() and path.is_file() and not path.name.startswith("."):
-            return path
-    return None
-
-
-def _parse_skill_meta(path: Path, fallback_name: str) -> tuple[str, str]:
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return _slug_name(fallback_name), ""
-    data: dict[str, str] = {}
-    lines = raw.splitlines()
-    if lines and lines[0] == "---":
-        try:
-            end = lines.index("---", 1)
-        except ValueError:
-            end = -1
-        if end > 0:
-            for line in lines[1:end]:
-                match = re.match(r"^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$", line)
-                if match:
-                    data[match.group(1)] = match.group(2).strip()
-    name = data.get("name") or fallback_name
-    return _slug_name(name), (data.get("description") or "").strip()
+def _parsed_skills_from_root(root: Path, source_type: str, source_uri: str = "") -> list[dict[str, Any]]:
+    return parse_skill_extensions([
+        {
+            "id": None,
+            "kind": "skill",
+            "name": root.name,
+            "description": "",
+            "source_type": source_type,
+            "source_uri": source_uri,
+            "config": {"local_path": str(root), "format": "skill_dir"},
+            "enabled": True,
+        }
+    ])
 
 
 def _safe_upload_path(raw: str, strip_prefix: str = "") -> Path:
@@ -255,7 +241,7 @@ async def _download_zip(url: str, dst: Path) -> None:
         shutil.copytree(root, dst, ignore=shutil.ignore_patterns("__MACOSX", ".DS_Store", "skill.zip"))
 
 
-async def _install_skill_dir(payload: SkillPayload) -> tuple[str, Path]:
+async def _install_skill_dir(payload: SkillPayload) -> Path:
     if not payload.source_uri.strip():
         raise HTTPException(status_code=400, detail="请填写 Skill 来源目录或仓库地址。")
     name = _infer_name(payload.source_uri, payload.name)
@@ -271,19 +257,19 @@ async def _install_skill_dir(payload: SkillPayload) -> tuple[str, Path]:
             await _download_zip(payload.source_uri.strip(), target)
         else:
             raise HTTPException(status_code=400, detail="不支持的 Skill 来源。")
-        if _find_skill_file(target, name) is None:
+        if not _parsed_skills_from_root(target, payload.source_type, payload.source_uri):
             raise HTTPException(
                 status_code=400,
-                detail="Skill 目录里需要包含 SKILL.md（或 <name>.md），请按 Reasonix skill 结构组织。",
+                detail="没有识别到合法 Skill。请确认目录包含 SKILL.md、<name>.md，或 skills/<skill-name>/SKILL.md。",
             )
     except Exception:
         if target.exists():
             shutil.rmtree(target, ignore_errors=True)
         raise
-    return name, target
+    return target
 
 
-async def _install_uploaded_skill(payload: SkillUploadPayload) -> tuple[str, str, Path]:
+async def _install_uploaded_skill(payload: SkillUploadPayload) -> Path:
     target = _unique_skill_dir("skill")
     try:
         if payload.source_type == "local_dir_upload":
@@ -294,18 +280,12 @@ async def _install_uploaded_skill(payload: SkillUploadPayload) -> tuple[str, str
             _extract_zip_bytes(payload.zip_data, target)
         else:
             raise HTTPException(status_code=400, detail="不支持的 Skill 上传方式。")
-        skill_file = _find_skill_file(target, target.name)
-        if skill_file is None:
+        if not _parsed_skills_from_root(target, payload.source_type):
             raise HTTPException(
                 status_code=400,
-                detail="Skill 目录里需要包含 SKILL.md（或 <name>.md）。",
+                detail="没有识别到合法 Skill。请确认目录包含 SKILL.md、<name>.md，或 skills/<skill-name>/SKILL.md。",
             )
-        name, description = _parse_skill_meta(skill_file, target.name)
-        final_dir = target.with_name(f"{name}-{int(time.time() * 1000)}")
-        if final_dir != target:
-            target.rename(final_dir)
-            target = final_dir
-        return name, description, target
+        return target
     except Exception:
         if target.exists():
             shutil.rmtree(target, ignore_errors=True)
@@ -314,45 +294,87 @@ async def _install_uploaded_skill(payload: SkillUploadPayload) -> tuple[str, str
 
 @router.get("/skills")
 async def api_list_skills() -> dict[str, Any]:
-    return {"skills": list_extensions(DEFAULT_USER_ID, "skill")}
+    items = list_extensions(DEFAULT_USER_ID, "skill")
+    parsed_by_id: dict[Any, list[dict[str, Any]]] = {}
+    for skill in parse_skill_extensions(items):
+        parsed_by_id.setdefault(skill.get("id"), []).append(skill)
+    enriched: list[dict[str, Any]] = []
+    for item in items:
+        parsed = parsed_by_id.get(item.get("id")) or []
+        if not parsed:
+            enriched.append({**item, "parse_error": "未识别到 SKILL.md"})
+            continue
+        for skill in parsed:
+            enriched.append({
+                **item,
+                "name": skill["name"],
+                "description": skill["description"],
+                "run_as": skill["run_as"],
+                "allowed_tools": skill["allowed_tools"],
+                "skill_path": skill["path"],
+                "local_path": skill["local_path"],
+            })
+    return {"skills": enriched}
+
+
+def _register_parsed_skills(
+    *,
+    root: Path,
+    source_type: str,
+    source_uri: str,
+    enabled: bool,
+) -> list[dict[str, Any]]:
+    parsed = _parsed_skills_from_root(root, source_type, source_uri)
+    if not parsed:
+        raise HTTPException(
+            status_code=400,
+            detail="没有识别到合法 Skill。请确认目录包含 SKILL.md、<name>.md，或 skills/<skill-name>/SKILL.md。",
+        )
+    registered: list[dict[str, Any]] = []
+    for skill in parsed:
+        registered.append(upsert_extension(
+            DEFAULT_USER_ID,
+            kind="skill",
+            name=skill["name"],
+            description=skill["description"],
+            source_type=source_type,
+            source_uri=source_uri,
+            content="",
+            config={
+                "local_path": skill["local_path"],
+                "skill_path": skill["path"],
+                "collection_path": str(root),
+                "format": "skill_dir",
+                "run_as": skill["run_as"],
+                "allowed_tools": skill["allowed_tools"],
+            },
+            enabled=enabled,
+        ))
+    return registered
 
 
 @router.post("/skills")
 async def api_create_skill(payload: SkillPayload) -> dict[str, Any]:
-    name, local_dir = await _install_skill_dir(payload)
-    skill_file = _find_skill_file(local_dir, name)
-    parsed_name, parsed_description = (
-        _parse_skill_meta(skill_file, name) if skill_file else (name, "")
-    )
-    skill = upsert_extension(
-        DEFAULT_USER_ID,
-        kind="skill",
-        name=parsed_name,
-        description=parsed_description,
+    local_dir = await _install_skill_dir(payload)
+    skills = _register_parsed_skills(
+        root=local_dir,
         source_type=payload.source_type,
         source_uri=payload.source_uri.strip(),
-        content="",
-        config={"local_path": str(local_dir), "format": "skill_dir"},
         enabled=payload.enabled,
     )
-    return {"ok": True, "skill": skill}
+    return {"ok": True, "skills": skills, "count": len(skills)}
 
 
 @router.post("/skills/upload")
 async def api_upload_skill(payload: SkillUploadPayload) -> dict[str, Any]:
-    name, description, local_dir = await _install_uploaded_skill(payload)
-    skill = upsert_extension(
-        DEFAULT_USER_ID,
-        kind="skill",
-        name=name,
-        description=description,
+    local_dir = await _install_uploaded_skill(payload)
+    skills = _register_parsed_skills(
+        root=local_dir,
         source_type=payload.source_type,
         source_uri="",
-        content="",
-        config={"local_path": str(local_dir), "format": "skill_dir"},
         enabled=payload.enabled,
     )
-    return {"ok": True, "skill": skill}
+    return {"ok": True, "skills": skills, "count": len(skills)}
 
 
 @router.delete("/skills/{skill_id}")

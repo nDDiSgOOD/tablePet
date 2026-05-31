@@ -1577,8 +1577,32 @@
     .skill-name { font-weight:600; font-size:var(--fs-base); }
     .skill-type { font-size:var(--fs-xs); color:var(--muted); }
     .skill-desc { color:var(--muted); font-size:var(--fs-md); min-height:36px; line-height:1.5; }
+    .skill-meta { font-size:var(--fs-xs); color:var(--muted); word-break:break-all; }
     .skill-actions { display:flex; gap:6px; margin-top:var(--s-2); }
     .skill-actions .btn { padding:5px var(--s-3); font-size:var(--fs-md); }
+    .install-progress {
+      display:none;
+      gap:8px;
+      padding:var(--s-3);
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:color-mix(in oklch, var(--panel-2) 70%, transparent);
+    }
+    .install-progress.active { display:grid; }
+    .install-progress-bar {
+      height:8px;
+      border-radius:999px;
+      background:color-mix(in oklch, var(--line) 55%, transparent);
+      overflow:hidden;
+    }
+    .install-progress-fill {
+      width:0%;
+      height:100%;
+      border-radius:inherit;
+      background:linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition:width var(--t-med);
+    }
+    .install-progress-text { font-size:var(--fs-xs); color:var(--muted); }
     @media (max-width: 980px) {
       .extension-layout { grid-template-columns:1fr; }
     }
@@ -3000,6 +3024,10 @@
             <button class="btn" id="skillPickDirBtn" type="button">选择文件夹</button>
             <button class="btn" id="skillPickZipBtn" type="button" style="display:none;">选择 ZIP</button>
             <div class="small" id="skillPickedHint">还没有选择文件夹</div>
+            <div class="install-progress" id="skillInstallProgress" aria-live="polite">
+              <div class="install-progress-bar"><div class="install-progress-fill" id="skillInstallProgressFill"></div></div>
+              <div class="install-progress-text" id="skillInstallProgressText">准备安装...</div>
+            </div>
             <input id="skillDirInput" type="file" webkitdirectory multiple hidden>
             <input id="skillZipInput" type="file" accept=".zip,application/zip" hidden>
             <button class="btn primary" type="submit">安装 Skill</button>
@@ -4704,7 +4732,11 @@ async function refreshMcp() {
 function extensionCard(item, kind) {
   const localPath = item.config && item.config.local_path ? item.config.local_path : '';
   const source = [item.source_type, item.source_uri].filter(Boolean).join(' · ');
-  const desc = item.description || (kind === 'skill' ? localPath : source) || (kind === 'mcp' ? 'MCP server 配置' : '本地 Skill 目录');
+  const parsedPath = item.skill_path || item.local_path || localPath;
+  const desc = item.parse_error || item.description || (kind === 'skill' ? parsedPath : source) || (kind === 'mcp' ? 'MCP server 配置' : '本地 Skill 目录');
+  const meta = kind === 'skill'
+    ? [item.run_as ? `runAs: ${item.run_as}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', parsedPath || ''].filter(Boolean).join(' · ')
+    : source;
   return `
     <div class="skill-card installed">
       <div class="skill-head">
@@ -4715,6 +4747,7 @@ function extensionCard(item, kind) {
         <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
       </div>
       <div class="skill-desc">${escapeHtml(desc)}</div>
+      ${meta ? `<div class="skill-meta">${escapeHtml(meta)}</div>` : ''}
       <div class="skill-actions">
         <button class="btn" data-toggle-${kind}="${item.id}">${item.enabled?'停用':'启用'}</button>
         <button class="btn danger" data-delete-${kind}="${item.id}">卸载</button>
@@ -4726,7 +4759,7 @@ function renderSkills() {
   if (!grid) return;
   grid.innerHTML = _skills.length
     ? _skills.map(s => extensionCard(s, 'skill')).join('')
-    : '<div class="empty">还没有安装 Skill。可以从本地目录、GitHub 仓库、Git URL 或 ZIP URL 开始。</div>';
+    : '<div class="empty">还没有安装 Skill。可以从本地文件夹、本地 ZIP 或 GitHub 仓库开始。</div>';
   grid.querySelectorAll('[data-delete-skill]').forEach(b => b.addEventListener('click', async () => {
     await api('DELETE', `/api/skills/${encodeURIComponent(b.dataset.deleteSkill)}`);
     toast('已卸载 Skill');
@@ -4784,6 +4817,21 @@ function updateSkillSourceUI() {
     else hint.textContent = $('skillDirInput').files.length ? `已选择 ${$('skillDirInput').files.length} 个文件` : '还没有选择文件夹';
   }
 }
+function setSkillInstallProgress(percent, text) {
+  const box = $('skillInstallProgress');
+  const fill = $('skillInstallProgressFill');
+  const label = $('skillInstallProgressText');
+  if (!box || !fill || !label) return;
+  box.classList.add('active');
+  fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  label.textContent = text;
+}
+function hideSkillInstallProgress(delay = 900) {
+  setTimeout(() => {
+    const box = $('skillInstallProgress');
+    if (box) box.classList.remove('active');
+  }, delay);
+}
 const skillForm = $('skillForm');
 if (skillForm) {
   skillForm.elements.source_type.addEventListener('change', updateSkillSourceUI);
@@ -4798,33 +4846,49 @@ if (skillForm) skillForm.addEventListener('submit', async (ev) => {
   const f = ev.currentTarget;
   try {
     const source = f.elements.source_type.value;
+    let result;
+    setSkillInstallProgress(8, '准备安装...');
     if (source === 'github_repo') {
-      await api('POST', '/api/skills', {
+      setSkillInstallProgress(28, '正在拉取 GitHub 仓库...');
+      result = await api('POST', '/api/skills', {
         source_type: 'github_repo',
         source_uri: f.elements.source_uri.value.trim(),
       });
     } else if (source === 'zip_upload') {
       const file = $('skillZipInput').files[0];
       if (!file) throw new Error('请先选择 ZIP 文件');
-      await api('POST', '/api/skills/upload', {
+      setSkillInstallProgress(25, '正在读取 ZIP 文件...');
+      const zip_data = arrayBufferToBase64(await file.arrayBuffer());
+      setSkillInstallProgress(55, '正在上传并解压 ZIP...');
+      result = await api('POST', '/api/skills/upload', {
         source_type: 'zip_upload',
-        zip_data: arrayBufferToBase64(await file.arrayBuffer()),
+        zip_data,
       });
     } else {
       const files = Array.from($('skillDirInput').files || []);
       if (!files.length) throw new Error('请先选择 Skill 文件夹');
-      await api('POST', '/api/skills/upload', {
+      setSkillInstallProgress(25, `正在读取 ${files.length} 个文件...`);
+      const uploadFiles = await Promise.all(files.map(fileToUpload));
+      setSkillInstallProgress(55, '正在上传并解析目录...');
+      result = await api('POST', '/api/skills/upload', {
         source_type: 'local_dir_upload',
-        files: await Promise.all(files.map(fileToUpload)),
+        files: uploadFiles,
       });
     }
+    setSkillInstallProgress(82, '正在注册识别到的 Skill...');
     f.reset();
     $('skillDirInput').value = '';
     $('skillZipInput').value = '';
     updateSkillSourceUI();
-    toast('已安装 Skill');
-    refreshSkills();
-  } catch (e) { toast('安装失败：' + e.message, 'error'); }
+    setSkillInstallProgress(100, `完成，已注册 ${result?.count || result?.skills?.length || 1} 个 Skill`);
+    toast(`已安装 ${result?.count || result?.skills?.length || 1} 个 Skill`);
+    await refreshSkills();
+    hideSkillInstallProgress();
+  } catch (e) {
+    setSkillInstallProgress(100, '解析失败：' + e.message);
+    toast('安装失败：' + e.message, 'error');
+    hideSkillInstallProgress(2400);
+  }
 });
 const mcpForm = $('mcpForm');
 if (mcpForm) mcpForm.addEventListener('submit', async (ev) => {
