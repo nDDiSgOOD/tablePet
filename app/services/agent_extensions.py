@@ -272,15 +272,37 @@ def build_mcp_index_context(user_id: str) -> str:
     lines = [
         "## MCP servers",
         "",
-        "Configured MCP specs are listed here. In Reasonix these specs are bridged into callable tools after the client initializes. TablePet keeps the same spec shape so the next step can hot-bridge each server into function tools.",
+        "Configured MCP servers are listed here with discovered tools. When a user asks for a capability provided by an MCP tool, call `call_mcp_tool` with server_id, tool_name, and arguments.",
     ]
     for item in servers:
         spec = _mcp_spec_for_item(item)
         if not spec:
             continue
         desc = str(item.get("description") or "").strip()
-        lines.append(f"- {item.get('name') or 'mcp'}: `{spec}`" + (f" - {desc}" if desc else ""))
+        config = item.get("config") or {}
+        status = config.get("status") or "unknown"
+        lines.append(f"- server_id={item.get('id')} {item.get('name') or 'mcp'}: `{spec}` status={status}" + (f" - {desc}" if desc else ""))
+        tools = config.get("tools") or []
+        if isinstance(tools, list) and tools:
+            for tool in tools[:20]:
+                if not isinstance(tool, dict):
+                    continue
+                t_name = str(tool.get("name") or "").strip()
+                if not t_name:
+                    continue
+                t_desc = str(tool.get("description") or "").replace("\n", " ").strip()
+                lines.append(f"  - tool: {t_name}" + (f" - {t_desc[:160]}" if t_desc else ""))
+        elif config.get("last_error"):
+            lines.append(f"  - tool discovery error: {str(config.get('last_error'))[:180]}")
     return "\n".join(lines) if len(lines) > 3 else ""
+
+
+def _has_mcp_tools(user_id: str) -> bool:
+    for item in list_enabled_extensions(user_id, "mcp"):
+        tools = (item.get("config") or {}).get("tools") or []
+        if isinstance(tools, list) and tools:
+            return True
+    return False
 
 
 def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
@@ -288,12 +310,43 @@ def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
     skill_tool = skill_tool_spec(user_id)
     if skill_tool:
         tools.append(skill_tool)
+    if _has_mcp_tools(user_id):
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "call_mcp_tool",
+                "description": "Call a discovered tool from a configured MCP server by server_id and tool_name.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "server_id": {"type": "integer", "description": "MCP server id shown in the MCP servers index."},
+                        "tool_name": {"type": "string", "description": "Exact MCP tool name."},
+                        "arguments": {"type": "object", "description": "Tool arguments matching the discovered input schema."},
+                    },
+                    "required": ["server_id", "tool_name"],
+                },
+            },
+        })
     return tools
 
 
-def dispatch_agent_tool(user_id: str, name: str, arguments: dict[str, Any]) -> str:
+async def dispatch_agent_tool(user_id: str, name: str, arguments: dict[str, Any]) -> str:
     if name == "run_skill":
         return run_skill_tool(user_id, arguments)
+    if name == "call_mcp_tool":
+        try:
+            from ..routers.agent_extensions import _call_mcp_tool
+            from ..storage.agent_extension import get_extension
+
+            server_id = int(arguments.get("server_id") or 0)
+            tool_name = str(arguments.get("tool_name") or "").strip()
+            server = get_extension(user_id, server_id, "mcp")
+            if server is None:
+                return json.dumps({"error": f"unknown MCP server_id: {server_id}"}, ensure_ascii=False)
+            result = await _call_mcp_tool(server.get("config") or {}, tool_name, arguments.get("arguments") or {})
+            return json.dumps({"result": result}, ensure_ascii=False)
+        except Exception as exc:
+            return json.dumps({"error": str(getattr(exc, "detail", exc))[:500]}, ensure_ascii=False)
     return json.dumps({"error": f"unknown tool: {name}"}, ensure_ascii=False)
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import base64
+import asyncio
 import re
 import shutil
 import subprocess
@@ -12,6 +13,7 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urljoin
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -72,6 +74,217 @@ class McpPayload(BaseModel):
 
 class TogglePayload(BaseModel):
     enabled: bool | None = None
+
+
+class McpToolCallPayload(BaseModel):
+    tool_name: str = Field(max_length=200)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+def _jsonrpc_message(req_id: int, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    msg: dict[str, Any] = {"jsonrpc": "2.0", "id": req_id, "method": method}
+    if params is not None:
+        msg["params"] = params
+    return msg
+
+
+def _tools_from_result(result: Any) -> list[dict[str, Any]]:
+    raw_tools = (result or {}).get("tools") if isinstance(result, dict) else []
+    tools: list[dict[str, Any]] = []
+    if not isinstance(raw_tools, list):
+        return tools
+    for tool in raw_tools:
+        if not isinstance(tool, dict):
+            continue
+        name = str(tool.get("name") or "").strip()
+        if not name:
+            continue
+        tools.append({
+            "name": name,
+            "description": str(tool.get("description") or "").strip(),
+            "input_schema": tool.get("inputSchema") or tool.get("input_schema") or {},
+        })
+    return tools
+
+
+async def _mcp_http_rpc(url: str, req_id: int, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        resp = await client.post(
+            url,
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+            },
+            json=_jsonrpc_message(req_id, method, params),
+        )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=400, detail=f"MCP HTTP 请求失败：HTTP {resp.status_code} {resp.text[:200]}")
+    try:
+        data = resp.json()
+    except ValueError:
+        text = resp.text
+        for line in text.splitlines():
+            if line.startswith("data:"):
+                payload = line[5:].strip()
+                if payload and payload != "[DONE]":
+                    data = json.loads(payload)
+                    break
+        else:
+            raise HTTPException(status_code=400, detail="MCP HTTP 返回不是 JSON。")
+    if isinstance(data, dict) and data.get("error"):
+        raise HTTPException(status_code=400, detail=f"MCP 工具请求失败：{data['error']}")
+    return data if isinstance(data, dict) else {}
+
+
+async def _discover_http_tools(url: str) -> list[dict[str, Any]]:
+    await _mcp_http_rpc(url, 1, "initialize", {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": {"name": "TablePet", "version": "0.1"},
+    })
+    data = await _mcp_http_rpc(url, 2, "tools/list")
+    return _tools_from_result(data.get("result"))
+
+
+async def _read_sse_until(reader: Any, target_id: int, timeout: float = 20) -> dict[str, Any]:
+    event_data: list[str] = []
+    async def _loop() -> dict[str, Any]:
+        async for line in reader.aiter_lines():
+            if line.startswith("data:"):
+                event_data.append(line[5:].strip())
+                continue
+            if line.strip():
+                continue
+            if not event_data:
+                continue
+            payload = "\n".join(event_data).strip()
+            event_data.clear()
+            if not payload or payload == "[DONE]":
+                continue
+            try:
+                data = json.loads(payload)
+            except ValueError:
+                continue
+            if data.get("id") == target_id:
+                if data.get("error"):
+                    raise HTTPException(status_code=400, detail=f"MCP SSE 请求失败：{data['error']}")
+                return data
+        return {}
+    return await asyncio.wait_for(_loop(), timeout=timeout)
+
+
+async def _discover_sse_tools(url: str) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        async with client.stream("GET", url, headers={"Accept": "text/event-stream"}) as stream:
+            endpoint = ""
+            async for line in stream.aiter_lines():
+                if line.startswith("data:"):
+                    payload = line[5:].strip()
+                    if payload.startswith(("http://", "https://", "/")):
+                        endpoint = urljoin(url, payload)
+                        break
+            if not endpoint:
+                raise HTTPException(status_code=400, detail="MCP SSE 未返回 message endpoint。")
+            await client.post(endpoint, json=_jsonrpc_message(1, "initialize", {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "TablePet", "version": "0.1"},
+            }))
+            await _read_sse_until(stream, 1)
+            await client.post(endpoint, json=_jsonrpc_message(2, "tools/list"))
+            data = await _read_sse_until(stream, 2)
+            return _tools_from_result(data.get("result"))
+
+
+async def _stdio_rpc(command: str, messages: list[dict[str, Any]], timeout: float = 20) -> list[dict[str, Any]]:
+    proc = await asyncio.create_subprocess_shell(
+        command,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    assert proc.stdin is not None and proc.stdout is not None
+    for msg in messages:
+        proc.stdin.write((json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8"))
+    await proc.stdin.drain()
+    results: list[dict[str, Any]] = []
+    ids = {m.get("id") for m in messages if m.get("id") is not None}
+    try:
+        while ids:
+            line = await asyncio.wait_for(proc.stdout.readline(), timeout=timeout)
+            if not line:
+                break
+            try:
+                data = json.loads(line.decode("utf-8", errors="ignore").strip())
+            except ValueError:
+                continue
+            if data.get("id") in ids:
+                results.append(data)
+                ids.discard(data.get("id"))
+    finally:
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            pass
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=2)
+        except asyncio.TimeoutError:
+            proc.kill()
+    return results
+
+
+async def _discover_stdio_tools(command: str) -> list[dict[str, Any]]:
+    results = await _stdio_rpc(command, [
+        _jsonrpc_message(1, "initialize", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "TablePet", "version": "0.1"},
+        }),
+        _jsonrpc_message(2, "tools/list"),
+    ])
+    data = next((r for r in results if r.get("id") == 2), {})
+    if data.get("error"):
+        raise HTTPException(status_code=400, detail=f"MCP stdio 发现工具失败：{data['error']}")
+    return _tools_from_result(data.get("result"))
+
+
+async def _discover_mcp_tools(config: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+    transport = config.get("transport")
+    if transport == "stdio":
+        tools = await _discover_stdio_tools(str(config.get("command") or ""))
+    elif transport == "http":
+        tools = await _discover_http_tools(str(config.get("url") or ""))
+    elif transport == "sse":
+        tools = await _discover_sse_tools(str(config.get("url") or ""))
+    else:
+        tools = []
+    return tools, "connected" if tools else "connected_empty"
+
+
+async def _call_mcp_tool(config: dict[str, Any], tool_name: str, arguments: dict[str, Any]) -> Any:
+    params = {"name": tool_name, "arguments": arguments or {}}
+    transport = config.get("transport")
+    if transport == "http":
+        data = await _mcp_http_rpc(str(config.get("url") or ""), 11, "tools/call", params)
+        return data.get("result")
+    if transport == "sse":
+        # 调试调用走简化路径：部分 SSE 网关支持同 URL POST；不支持时会给出清晰报错。
+        data = await _mcp_http_rpc(str(config.get("url") or ""), 11, "tools/call", params)
+        return data.get("result")
+    if transport == "stdio":
+        results = await _stdio_rpc(str(config.get("command") or ""), [
+            _jsonrpc_message(1, "initialize", {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "TablePet", "version": "0.1"},
+            }),
+            _jsonrpc_message(11, "tools/call", params),
+        ])
+        data = next((r for r in results if r.get("id") == 11), {})
+        if data.get("error"):
+            raise HTTPException(status_code=400, detail=f"MCP 工具调用失败：{data['error']}")
+        return data.get("result")
+    raise HTTPException(status_code=400, detail="不支持的 MCP transport。")
 
 
 def _github_to_raw(url: str) -> str:
@@ -435,6 +648,17 @@ async def api_create_mcp(payload: McpPayload) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="stdio MCP 需要填写启动命令。")
     if payload.transport in {"http", "sse"} and not config.get("url"):
         raise HTTPException(status_code=400, detail="HTTP/SSE MCP 需要填写服务地址。")
+    try:
+        tools, status = await _discover_mcp_tools(config)
+        config["tools"] = tools
+        config["status"] = status
+        config["last_error"] = ""
+        config["checked_at"] = time.time()
+    except Exception as exc:
+        config["tools"] = []
+        config["status"] = "error"
+        config["last_error"] = str(getattr(exc, "detail", exc))[:500]
+        config["checked_at"] = time.time()
     server = upsert_extension(
         DEFAULT_USER_ID,
         kind="mcp",
@@ -447,6 +671,51 @@ async def api_create_mcp(payload: McpPayload) -> dict[str, Any]:
         enabled=payload.enabled,
     )
     return {"ok": True, "server": server}
+
+
+@router.post("/mcp/{server_id}/refresh-tools")
+async def api_refresh_mcp_tools(server_id: int) -> dict[str, Any]:
+    server = get_extension(DEFAULT_USER_ID, server_id, "mcp")
+    if server is None:
+        raise HTTPException(status_code=404, detail="MCP 服务器不存在。")
+    config = dict(server.get("config") or {})
+    try:
+        tools, status = await _discover_mcp_tools(config)
+        config.update({
+            "tools": tools,
+            "status": status,
+            "last_error": "",
+            "checked_at": time.time(),
+        })
+    except Exception as exc:
+        config.update({
+            "tools": [],
+            "status": "error",
+            "last_error": str(getattr(exc, "detail", exc))[:500],
+            "checked_at": time.time(),
+        })
+    updated = upsert_extension(
+        DEFAULT_USER_ID,
+        kind="mcp",
+        name=server.get("name") or "",
+        description=server.get("description") or "",
+        source_type=server.get("source_type") or "inline",
+        source_uri=server.get("source_uri") or "",
+        content=server.get("content") or "",
+        config=config,
+        enabled=bool(server.get("enabled")),
+        extension_id=server_id,
+    )
+    return {"ok": config.get("status") != "error", "server": updated, "tools": config.get("tools") or [], "error": config.get("last_error") or ""}
+
+
+@router.post("/mcp/{server_id}/debug-tool")
+async def api_debug_mcp_tool(server_id: int, payload: McpToolCallPayload) -> dict[str, Any]:
+    server = get_extension(DEFAULT_USER_ID, server_id, "mcp")
+    if server is None:
+        raise HTTPException(status_code=404, detail="MCP 服务器不存在。")
+    result = await _call_mcp_tool(server.get("config") or {}, payload.tool_name, payload.arguments)
+    return {"ok": True, "result": result}
 
 
 @router.delete("/mcp/{server_id}")

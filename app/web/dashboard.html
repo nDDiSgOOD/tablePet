@@ -1578,6 +1578,38 @@
     .skill-type { font-size:var(--fs-xs); color:var(--muted); }
     .skill-desc { color:var(--muted); font-size:var(--fs-md); min-height:36px; line-height:1.5; }
     .skill-meta { font-size:var(--fs-xs); color:var(--muted); word-break:break-all; }
+    .skill-children {
+      margin-top:var(--s-2);
+      border-top:1px dashed color-mix(in oklch, var(--line) 55%, transparent);
+      padding-top:var(--s-2);
+    }
+    .skill-children summary {
+      cursor:pointer;
+      color:var(--text);
+      font-size:var(--fs-sm);
+      font-weight:600;
+    }
+    .skill-child {
+      display:grid;
+      gap:4px;
+      padding:var(--s-2) 0;
+      border-bottom:1px solid color-mix(in oklch, var(--line-soft) 55%, transparent);
+    }
+    .skill-child:last-child { border-bottom:0; }
+    .skill-child-head { display:flex; align-items:center; justify-content:space-between; gap:var(--s-2); }
+    .tool-list {
+      display:grid;
+      gap:6px;
+      margin-top:var(--s-2);
+    }
+    .tool-item {
+      padding:8px;
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:color-mix(in oklch, var(--panel-2) 58%, transparent);
+    }
+    .tool-name { font-weight:600; font-size:var(--fs-sm); }
+    .tool-desc { color:var(--muted); font-size:var(--fs-xs); line-height:1.5; }
     .skill-actions { display:flex; gap:6px; margin-top:var(--s-2); }
     .skill-actions .btn { padding:5px var(--s-3); font-size:var(--fs-md); }
     .install-progress {
@@ -3067,6 +3099,10 @@
             <label>MCP 说明
               <input name="description" placeholder="例如：让桌宠读取某个本地目录">
             </label>
+            <div class="install-progress" id="mcpInstallProgress" aria-live="polite">
+              <div class="install-progress-bar"><div class="install-progress-fill" id="mcpInstallProgressFill"></div></div>
+              <div class="install-progress-text" id="mcpInstallProgressText">准备连接...</div>
+            </div>
             <button class="btn primary" type="submit">添加 MCP</button>
           </form>
         </div>
@@ -3330,8 +3366,18 @@ async function api(method, url, body) {
     opts.body = JSON.stringify(body);
   }
   const r = await fetch(url, opts);
-  if (!r.ok) throw new Error(`${method} ${url} -> ${r.status}`);
   const ct = r.headers.get('content-type') || '';
+  if (!r.ok) {
+    if (ct.includes('application/json')) {
+      let detail = '';
+      try {
+        const err = await r.json();
+        detail = err.detail || err.message || '';
+      } catch {}
+      if (detail) throw new Error(detail);
+    }
+    throw new Error(`${method} ${url} -> ${r.status}`);
+  }
   return ct.includes('application/json') ? r.json() : r.text();
 }
 
@@ -4754,11 +4800,65 @@ function extensionCard(item, kind) {
       </div>
     </div>`;
 }
+function skillGroupKey(item) {
+  const cfg = item.config || {};
+  return cfg.collection_path || item.source_uri || item.local_path || cfg.local_path || `skill-${item.id}`;
+}
+function renderSkillGroup(group) {
+  if (group.items.length === 1) return extensionCard(group.items[0], 'skill');
+  const enabledCount = group.items.filter(x => x.enabled).length;
+  const first = group.items[0] || {};
+  const source = first.source_uri || group.key;
+  return `
+    <div class="skill-card installed">
+      <div class="skill-head">
+        <div>
+          <div class="skill-name">${escapeHtml(group.title)}</div>
+          <div class="skill-type">Skill 集合 · ${group.items.length} 个技能 · ${enabledCount} 个启用</div>
+        </div>
+        <span class="badge ok">集合</span>
+      </div>
+      <div class="skill-desc">${escapeHtml(source)}</div>
+      <details class="skill-children" open>
+        <summary>展开子 Skill</summary>
+        ${group.items.map(item => `
+          <div class="skill-child">
+            <div class="skill-child-head">
+              <div>
+                <div class="skill-name">${escapeHtml(item.name || '未命名 Skill')}</div>
+                <div class="skill-meta">${escapeHtml([item.run_as ? `runAs: ${item.run_as}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', item.skill_path || ''].filter(Boolean).join(' · '))}</div>
+              </div>
+              <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
+            </div>
+            <div class="skill-desc">${escapeHtml(item.description || item.parse_error || '没有 description')}</div>
+            <div class="skill-actions">
+              <button class="btn" data-toggle-skill="${item.id}">${item.enabled?'停用':'启用'}</button>
+              <button class="btn danger" data-delete-skill="${item.id}">卸载</button>
+            </div>
+          </div>
+        `).join('')}
+      </details>
+    </div>`;
+}
 function renderSkills() {
   const grid = $('skillGrid');
   if (!grid) return;
+  const groups = new Map();
+  for (const item of _skills) {
+    const key = skillGroupKey(item);
+    const cfg = item.config || {};
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        title: cfg.collection_path ? (item.source_uri || key.split('/').filter(Boolean).pop() || 'Skill 集合') : (item.name || 'Skill'),
+        items: [],
+      });
+    }
+    groups.get(key).items.push(item);
+  }
+  const list = Array.from(groups.values());
   grid.innerHTML = _skills.length
-    ? _skills.map(s => extensionCard(s, 'skill')).join('')
+    ? list.map(renderSkillGroup).join('')
     : '<div class="empty">还没有安装 Skill。可以从本地文件夹、本地 ZIP 或 GitHub 仓库开始。</div>';
   grid.querySelectorAll('[data-delete-skill]').forEach(b => b.addEventListener('click', async () => {
     await api('DELETE', `/api/skills/${encodeURIComponent(b.dataset.deleteSkill)}`);
@@ -4774,8 +4874,41 @@ function renderMcp() {
   const grid = $('mcpGrid');
   if (!grid) return;
   grid.innerHTML = _mcpServers.length
-    ? _mcpServers.map(s => extensionCard(s, 'mcp')).join('')
-    : '<div class="empty">还没有配置 MCP server。支持 stdio、HTTP、SSE，也可以从 JSON 配置导入。</div>';
+    ? _mcpServers.map(s => {
+        const cfg = s.config || {};
+        const tools = Array.isArray(cfg.tools) ? cfg.tools : [];
+        const status = cfg.status || 'unknown';
+        const source = cfg.transport === 'stdio' ? cfg.command : cfg.url;
+        return `
+          <div class="skill-card installed">
+            <div class="skill-head">
+              <div>
+                <div class="skill-name">${escapeHtml(s.name || 'MCP Server')}</div>
+                <div class="skill-type">MCP · #${escapeHtml(s.id)} · ${escapeHtml(cfg.transport || 'unknown')} · ${escapeHtml(status)}</div>
+              </div>
+              <span class="badge ${s.enabled && status !== 'error' ? 'ok':'muted'}">${s.enabled?'启用':'停用'}</span>
+            </div>
+            <div class="skill-desc">${escapeHtml(s.description || source || cfg.last_error || 'MCP server 配置')}</div>
+            ${cfg.last_error ? `<div class="skill-meta">错误：${escapeHtml(cfg.last_error)}</div>` : ''}
+            <div class="tool-list">
+              ${tools.length ? tools.map(t => `
+                <div class="tool-item">
+                  <div class="tool-name">${escapeHtml(t.name || 'tool')}</div>
+                  <div class="tool-desc">${escapeHtml(t.description || '无说明')}</div>
+                  <div class="skill-actions">
+                    <button class="btn" data-debug-mcp="${s.id}" data-tool="${escapeHtml(t.name || '')}">调试工具</button>
+                  </div>
+                </div>
+              `).join('') : '<div class="skill-meta">尚未发现工具。可点“刷新工具”重新连接。</div>'}
+            </div>
+            <div class="skill-actions">
+              <button class="btn" data-refresh-mcp-tools="${s.id}">刷新工具</button>
+              <button class="btn" data-toggle-mcp="${s.id}">${s.enabled?'停用':'启用'}</button>
+              <button class="btn danger" data-delete-mcp="${s.id}">删除</button>
+            </div>
+          </div>`;
+      }).join('')
+    : '<div class="empty">还没有配置 MCP server。支持 stdio、Streamable HTTP、SSE。</div>';
   grid.querySelectorAll('[data-delete-mcp]').forEach(b => b.addEventListener('click', async () => {
     await api('DELETE', `/api/mcp/${encodeURIComponent(b.dataset.deleteMcp)}`);
     toast('已删除 MCP');
@@ -4784,6 +4917,29 @@ function renderMcp() {
   grid.querySelectorAll('[data-toggle-mcp]').forEach(b => b.addEventListener('click', async () => {
     await api('POST', `/api/mcp/${encodeURIComponent(b.dataset.toggleMcp)}/toggle`);
     refreshMcp();
+  }));
+  grid.querySelectorAll('[data-refresh-mcp-tools]').forEach(b => b.addEventListener('click', async () => {
+    try {
+      toast('正在刷新 MCP 工具列表...');
+      const r = await api('POST', `/api/mcp/${encodeURIComponent(b.dataset.refreshMcpTools)}/refresh-tools`);
+      if (!r.ok) toast('刷新失败：' + (r.error || '未发现工具'), 'error');
+      else toast(`已发现 ${r.tools?.length || 0} 个工具`);
+      refreshMcp();
+    } catch (e) { toast('刷新失败：' + e.message, 'error'); }
+  }));
+  grid.querySelectorAll('[data-debug-mcp]').forEach(b => b.addEventListener('click', async () => {
+    const raw = prompt(`调试工具 ${b.dataset.tool}，请输入 JSON 参数：`, '{}');
+    if (raw === null) return;
+    let args = {};
+    try { args = JSON.parse(raw || '{}'); }
+    catch { toast('参数不是合法 JSON', 'error'); return; }
+    try {
+      const r = await api('POST', `/api/mcp/${encodeURIComponent(b.dataset.debugMcp)}/debug-tool`, {
+        tool_name: b.dataset.tool,
+        arguments: args,
+      });
+      alert(JSON.stringify(r.result, null, 2));
+    } catch (e) { toast('调试失败：' + e.message, 'error'); }
   }));
 }
 function arrayBufferToBase64(buffer) {
@@ -4829,6 +4985,21 @@ function setSkillInstallProgress(percent, text) {
 function hideSkillInstallProgress(delay = 900) {
   setTimeout(() => {
     const box = $('skillInstallProgress');
+    if (box) box.classList.remove('active');
+  }, delay);
+}
+function setMcpInstallProgress(percent, text) {
+  const box = $('mcpInstallProgress');
+  const fill = $('mcpInstallProgressFill');
+  const label = $('mcpInstallProgressText');
+  if (!box || !fill || !label) return;
+  box.classList.add('active');
+  fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  label.textContent = text;
+}
+function hideMcpInstallProgress(delay = 900) {
+  setTimeout(() => {
+    const box = $('mcpInstallProgress');
     if (box) box.classList.remove('active');
   }, delay);
 }
@@ -4897,16 +5068,26 @@ if (mcpForm) mcpForm.addEventListener('submit', async (ev) => {
   try {
     const transport = f.elements.transport.value;
     const address = f.elements.address.value.trim();
-    await api('POST', '/api/mcp', {
+    setMcpInstallProgress(15, '正在准备 MCP 配置...');
+    setMcpInstallProgress(42, transport === 'stdio' ? '正在启动并握手 stdio server...' : '正在连接 MCP server...');
+    const r = await api('POST', '/api/mcp', {
       transport,
       command: transport === 'stdio' ? address : '',
       url: transport === 'stdio' ? '' : address,
       description: f.elements.description.value.trim(),
     });
+    const tools = r.server?.config?.tools || [];
+    const status = r.server?.config?.status || 'unknown';
+    setMcpInstallProgress(100, status === 'error' ? '连接完成，但工具发现失败' : `完成，发现 ${tools.length} 个工具`);
     f.reset();
-    toast('已添加 MCP');
-    refreshMcp();
-  } catch (e) { toast('添加失败：' + e.message, 'error'); }
+    toast(status === 'error' ? '已添加 MCP，但工具发现失败' : `已添加 MCP，发现 ${tools.length} 个工具`, status === 'error' ? 'error' : 'ok');
+    await refreshMcp();
+    hideMcpInstallProgress(status === 'error' ? 2200 : 900);
+  } catch (e) {
+    setMcpInstallProgress(100, '连接失败：' + e.message);
+    toast('添加失败：' + e.message, 'error');
+    hideMcpInstallProgress(2400);
+  }
 });
 $('refreshSkillBtn')?.addEventListener('click', refreshSkills);
 $('refreshMcpBtn')?.addEventListener('click', refreshMcp);

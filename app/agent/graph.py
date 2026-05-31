@@ -213,16 +213,17 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
             "你是 TablePet——一只会聊天、有情绪、有记忆的桌面宠物。"
             "你说话自然、口语化、带一点撒娇感。"
         )
-    # 随机模式下，强制 LLM 忽略历史回复语气，严格按照本轮抽到的人格说话。
-    # 否则模型会从 history 里 assistant 之前的语气延续过来，造成"看起来没换人格"。
-    if is_random_mode:
-        persona = (
-            f"⚠️ 本轮人格：「{persona_label}」（随机模式 / id={persona_id}）。\n"
-            "你必须严格按照下面这一段人格设定说话，**完全忽略历史对话里你自己之前的语气、口头禅和自称**。"
-            "随机模式的特性就是每一轮回复风格都不同，这是预期行为；如果上一轮你叫自己「喵酱」，本轮人格不让你这样叫，你就要换。\n"
-            "⚠️ 即使在随机模式下，也绝对不要输出括号动作描写、emoji、Markdown —— 全部输出都会被 TTS 念出来。\n\n"
-            + persona
-        )
+    # 每轮都强制声明当前人格，避免同一会话历史里的旧 assistant 语气把新人格"拖回去"。
+    # 随机模式只是额外强调每轮风格可变；手动切换也必须立即生效。
+    persona = (
+        f"⚠️ 当前生效人格：「{persona_label}」（id={persona_id}"
+        + ("，随机模式" if is_random_mode else "")
+        + "）。\n"
+        "你必须严格按照当前人格设定回复，完全忽略历史对话里你自己之前的语气、口头禅、自称和称呼习惯。"
+        "如果用户刚切换人格，本轮必须立刻体现新风格。\n"
+        "⚠️ 不要输出括号动作描写、emoji、Markdown —— 全部输出都会被 TTS 念出来。\n\n"
+        + persona
+    )
     import logging as _logging
     _logging.getLogger(__name__).info(
         "node_llm persona=%s mode_random=%s user=%s",
@@ -285,7 +286,7 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
                         args = {}
                 except Exception:
                     args = {}
-                result = dispatch_agent_tool(user_id, name, args)
+                result = await dispatch_agent_tool(user_id, name, args)
                 tool_messages.append({
                     "role": "tool",
                     "tool_call_id": call.get("id") or name,
@@ -345,8 +346,6 @@ async def node_parse(state: AgentState) -> dict[str, Any]:
     在这里顺便做 TTS 友好清洗：去掉括号动作描写、emoji、Markdown 标记，
     防止 USB / WiFi 端把 "（歪头思考）" 这种舞台说明真的念出来。
     """
-    import re as _re
-
     text = state.get("assistant_text") or ""
     cleaned = _sanitize_for_tts(text) if text else text
     return {"assistant_text": cleaned, "state_update": {}, "memory_update": {}}
