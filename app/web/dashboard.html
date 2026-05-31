@@ -1568,7 +1568,6 @@
       min-height:130px;
       resize:vertical;
     }
-    .extension-form select,
     .tool-debug-field select {
       appearance:none;
       min-height:38px;
@@ -1584,9 +1583,54 @@
       background-repeat:no-repeat;
       cursor:pointer;
     }
-    .extension-form select:hover,
     .tool-debug-field select:hover {
       border-color:color-mix(in oklch, var(--accent) 45%, var(--line));
+    }
+    .choice-label {
+      color:var(--muted);
+      font-size:var(--fs-sm);
+    }
+    .choice-grid {
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+      gap:8px;
+    }
+    .choice-option {
+      display:grid;
+      gap:4px;
+      text-align:left;
+      padding:10px 11px;
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:var(--panel-2);
+      color:var(--muted);
+      cursor:pointer;
+      transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast), transform var(--t-fast);
+    }
+    .choice-option:hover {
+      color:var(--text);
+      border-color:color-mix(in oklch, var(--accent) 38%, var(--line));
+      background:var(--panel-3);
+      transform:translateY(-1px);
+    }
+    .choice-option.active {
+      color:var(--text);
+      border-color:color-mix(in oklch, var(--accent) 62%, var(--line));
+      background:color-mix(in oklch, var(--accent-soft) 58%, var(--panel-2));
+      box-shadow:0 0 0 1px color-mix(in oklch, var(--accent) 28%, transparent);
+    }
+    .choice-title {
+      font-size:var(--fs-md);
+      font-weight:650;
+      line-height:1.25;
+    }
+    .choice-desc {
+      color:var(--muted);
+      font-size:var(--fs-xs);
+      line-height:1.35;
+    }
+    @media (max-width: 720px) {
+      .choice-grid { grid-template-columns:1fr; }
     }
     .campus-shell {
       display:grid;
@@ -3251,13 +3295,22 @@
       <div class="extension-dialog-body">
         <div class="extension-modal-pane active" data-extension-modal-pane="skill">
           <form id="skillForm" class="extension-form" autocomplete="off">
-            <label>来源
-              <select name="source_type">
-                <option value="local_dir_upload">本地文件夹</option>
-                <option value="zip_upload">本地 ZIP</option>
-                <option value="github_repo">GitHub 仓库</option>
-              </select>
-            </label>
+            <div class="choice-label">来源</div>
+            <input type="hidden" name="source_type" value="local_dir_upload">
+            <div class="choice-grid" data-choice-group="source_type">
+              <button class="choice-option active" type="button" data-choice-value="local_dir_upload">
+                <span class="choice-title">本地文件夹</span>
+                <span class="choice-desc">选择目录，适合开发中的 Skill</span>
+              </button>
+              <button class="choice-option" type="button" data-choice-value="zip_upload">
+                <span class="choice-title">本地 ZIP</span>
+                <span class="choice-desc">上传压缩包，适合分享安装</span>
+              </button>
+              <button class="choice-option" type="button" data-choice-value="github_repo">
+                <span class="choice-title">GitHub 仓库</span>
+                <span class="choice-desc">填写仓库地址，自动拉取解析</span>
+              </button>
+            </div>
             <label id="skillGithubLabel" style="display:none;">GitHub 仓库地址
               <input name="source_uri" placeholder="owner/repo 或 https://github.com/owner/repo">
             </label>
@@ -3288,13 +3341,22 @@
             <label>备注（可选）
               <input name="description" placeholder="给自己看的用途说明，会展示在 MCP 卡片上">
             </label>
-            <label>传输方式
-              <select name="transport">
-                <option value="stdio">stdio</option>
-                <option value="http">Streamable HTTP</option>
-                <option value="sse">SSE</option>
-              </select>
-            </label>
+            <div class="choice-label">传输方式</div>
+            <input type="hidden" name="transport" value="stdio">
+            <div class="choice-grid" data-choice-group="transport">
+              <button class="choice-option active" type="button" data-choice-value="stdio">
+                <span class="choice-title">stdio</span>
+                <span class="choice-desc">本地命令启动，适合开发调试</span>
+              </button>
+              <button class="choice-option" type="button" data-choice-value="http">
+                <span class="choice-title">HTTP</span>
+                <span class="choice-desc">Streamable HTTP endpoint</span>
+              </button>
+              <button class="choice-option" type="button" data-choice-value="sse">
+                <span class="choice-title">SSE</span>
+                <span class="choice-desc">远程 SSE server 地址</span>
+              </button>
+            </div>
             <label>连接地址
               <input name="address" placeholder="stdio: npx -y xxx /path；HTTP/SSE: http://localhost:3001/mcp">
             </label>
@@ -5382,6 +5444,29 @@ async function fileToUpload(file) {
     data: arrayBufferToBase64(await file.arrayBuffer()),
   };
 }
+function syncChoiceGroup(form, name) {
+  if (!form) return;
+  const field = form.elements[name];
+  const group = form.querySelector(`[data-choice-group="${name}"]`);
+  if (!field || !group) return;
+  group.querySelectorAll('[data-choice-value]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.choiceValue === field.value);
+  });
+}
+function setupChoiceGroup(form, name, onChange) {
+  if (!form) return;
+  const field = form.elements[name];
+  const group = form.querySelector(`[data-choice-group="${name}"]`);
+  if (!field || !group) return;
+  group.querySelectorAll('[data-choice-value]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      field.value = btn.dataset.choiceValue || field.value;
+      syncChoiceGroup(form, name);
+      if (typeof onChange === 'function') onChange();
+    });
+  });
+  syncChoiceGroup(form, name);
+}
 function updateSkillSourceUI() {
   const form = $('skillForm');
   if (!form) return;
@@ -5430,7 +5515,7 @@ function hideMcpInstallProgress(delay = 900) {
 }
 const skillForm = $('skillForm');
 if (skillForm) {
-  skillForm.elements.source_type.addEventListener('change', updateSkillSourceUI);
+  setupChoiceGroup(skillForm, 'source_type', updateSkillSourceUI);
   $('skillPickDirBtn')?.addEventListener('click', () => $('skillDirInput')?.click());
   $('skillPickZipBtn')?.addEventListener('click', () => $('skillZipInput')?.click());
   $('skillDirInput')?.addEventListener('change', updateSkillSourceUI);
@@ -5481,6 +5566,7 @@ if (skillForm) skillForm.addEventListener('submit', async (ev) => {
     f.reset();
     $('skillDirInput').value = '';
     $('skillZipInput').value = '';
+    syncChoiceGroup(f, 'source_type');
     updateSkillSourceUI();
     setSkillInstallProgress(100, `完成，已注册 ${result?.count || result?.skills?.length || 1} 个 Skill`);
     toast(`已安装 ${result?.count || result?.skills?.length || 1} 个 Skill`);
@@ -5494,6 +5580,7 @@ if (skillForm) skillForm.addEventListener('submit', async (ev) => {
   }
 });
 const mcpForm = $('mcpForm');
+if (mcpForm) setupChoiceGroup(mcpForm, 'transport');
 if (mcpForm) mcpForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const f = ev.currentTarget;
@@ -5513,6 +5600,7 @@ if (mcpForm) mcpForm.addEventListener('submit', async (ev) => {
     const status = r.server?.config?.status || 'unknown';
     setMcpInstallProgress(100, status === 'error' ? '连接完成，但工具发现失败' : `完成，发现 ${tools.length} 个工具`);
     f.reset();
+    syncChoiceGroup(f, 'transport');
     toast(status === 'error' ? '已添加 MCP，但工具发现失败' : `已添加 MCP，发现 ${tools.length} 个工具`, status === 'error' ? 'error' : 'ok');
     await refreshMcp();
     hideMcpInstallProgress(status === 'error' ? 2200 : 900);
