@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -12,9 +17,13 @@ from ..storage.agent_extension import list_enabled_extensions
 MAX_SKILL_CHARS = 12_000
 MAX_TOTAL_CHARS = 32_000
 SKILLS_INDEX_MAX_CHARS = 4000
+MAX_SCRIPT_OUTPUT_CHARS = 12_000
+SKILL_SCRIPT_TIMEOUT_SECONDS = 30
 SKILL_FILE = "SKILL.md"
 VALID_SKILL_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 COLLECTION_DIRS = ("skills", ".reasonix/skills")
+SCRIPT_TOOL_NAME = "run_skill_script"
+SCRIPT_RUNTIMES = {"python", "node", "bash", "sh"}
 
 
 def _clip(text: str, limit: int) -> str:
@@ -127,6 +136,8 @@ def _parse_skill_file(item: dict[str, Any], path: Path) -> dict[str, Any] | None
         "allowed_tools": [
             t.strip() for t in (data.get("allowed-tools") or "").split(",") if t.strip()
         ],
+        "script": (data.get("script") or "").strip(),
+        "script_runtime": (data.get("script-runtime") or data.get("runtime") or "").strip().lower(),
         "path": str(path),
         "source_type": item.get("source_type") or "",
         "source_uri": item.get("source_uri") or "",
@@ -175,6 +186,8 @@ def read_skill(user_id: str, name: str) -> dict[str, Any] | None:
 
 def _skill_index_line(skill: dict[str, Any]) -> str:
     tag = " [subagent]" if skill.get("run_as") == "subagent" else ""
+    if _skill_allows_script(skill):
+        tag += " [script]"
     desc = str(skill.get("description") or "").replace("\n", " ").strip()
     max_desc = max(16, 130 - len(str(skill.get("name") or "")) - len(tag))
     if len(desc) > max_desc:
@@ -193,6 +206,7 @@ def build_skills_index_context(user_id: str) -> str:
         "## Skills - playbooks you can invoke",
         "",
         "Only a short index is pinned here. When a skill matches the user's request, call the `run_skill` tool with the bare skill name and a concise arguments string. The tool will read the local SKILL.md body on demand. Do not copy the [subagent] tag into the name.",
+        "If a skill is tagged [script], first call `run_skill` to read its instructions. Only call `run_skill_script` when the skill explicitly asks for its declared local script to run. Never invent shell commands.",
         "",
         "```",
         joined,
@@ -244,8 +258,154 @@ def run_skill_tool(user_id: str, raw_args: dict[str, Any]) -> str:
     if skill.get("description"):
         header += f"\n> {skill['description']}"
     header += f"\n(scope: local · {skill['path']})"
+    if _skill_allows_script(skill):
+        header += f"\n(script: {skill.get('script_runtime') or 'auto'} · {skill.get('script')})"
     args_block = f"\n\nArguments: {args}" if args else ""
     return _clip(f"{header}\n\n{skill['body']}{args_block}", MAX_SKILL_CHARS)
+
+
+def _skill_allows_script(skill: dict[str, Any]) -> bool:
+    allowed = {str(t).strip() for t in (skill.get("allowed_tools") or [])}
+    return bool(skill.get("script")) and SCRIPT_TOOL_NAME in allowed
+
+
+def _resolve_skill_script(skill: dict[str, Any]) -> tuple[Path, str] | tuple[None, str]:
+    if not _skill_allows_script(skill):
+        return None, "Skill 没有声明允许运行脚本。需要在 SKILL.md frontmatter 中设置 script 和 allowed-tools: run_skill_script。"
+    root = Path(str(skill.get("local_path") or "")).expanduser().resolve()
+    raw_script = str(skill.get("script") or "").strip()
+    if not raw_script or raw_script.startswith(("/", "~")):
+        return None, "script 必须是 Skill 目录内的相对路径。"
+    script = (root / raw_script).resolve()
+    try:
+        script.relative_to(root)
+    except ValueError:
+        return None, "script 不能跳出 Skill 目录。"
+    if not script.exists() or not script.is_file():
+        return None, f"脚本不存在：{raw_script}"
+    return script, ""
+
+
+def _runtime_command(runtime: str, script: Path) -> list[str] | None:
+    runtime = (runtime or "").strip().lower()
+    if not runtime:
+        suffix = script.suffix.lower()
+        if suffix == ".py":
+            runtime = "python"
+        elif suffix in {".js", ".mjs", ".cjs"}:
+            runtime = "node"
+        elif suffix in {".sh", ".bash"}:
+            runtime = "bash"
+    if runtime not in SCRIPT_RUNTIMES:
+        return None
+    if runtime == "python":
+        return [sys.executable, str(script)]
+    if runtime == "node":
+        return ["node", str(script)]
+    if runtime == "bash":
+        return ["bash", str(script)]
+    if runtime == "sh":
+        return ["sh", str(script)]
+    return None
+
+
+def _sandboxed_command(command: list[str], cwd: Path) -> tuple[list[str] | None, str]:
+    sandbox_exec = shutil.which("sandbox-exec")
+    if not sandbox_exec:
+        return None, "当前系统没有 sandbox-exec，无法使用 macOS best-effort 沙箱。"
+    profile = "\n".join([
+        "(version 1)",
+        "(deny default)",
+        "(allow process*)",
+        "(allow sysctl-read)",
+        "(allow file-read*)",
+        f"(allow file-write* (subpath {json.dumps(str(cwd))}) (subpath {json.dumps(tempfile.gettempdir())}))",
+    ])
+    return [sandbox_exec, "-p", profile, *command], ""
+
+
+def run_skill_script_tool(user_id: str, raw_args: dict[str, Any]) -> str:
+    raw_name = str(raw_args.get("name") or raw_args.get("skill_name") or "").strip()
+    raw_name = re.sub(r"\[[^\]]*\]", " ", raw_name).strip()
+    name = next((t for t in raw_name.split() if t and t[0].isalnum()), "")
+    if not name:
+        return json.dumps({"error": "run_skill_script requires a skill name"}, ensure_ascii=False)
+    skill = read_skill(user_id, name)
+    if skill is None:
+        available = [s["name"] for s in list_available_skills(user_id)]
+        return json.dumps({"error": f"unknown skill: {name}", "available": available}, ensure_ascii=False)
+
+    script, error = _resolve_skill_script(skill)
+    if script is None:
+        return json.dumps({"error": error}, ensure_ascii=False)
+    root = Path(str(skill.get("local_path") or "")).expanduser().resolve()
+    runtime = str(skill.get("script_runtime") or "").strip().lower()
+    command = _runtime_command(runtime, script)
+    if command is None:
+        return json.dumps(
+            {
+                "error": "不支持的脚本运行时",
+                "runtime": runtime or "auto",
+                "supported": sorted(SCRIPT_RUNTIMES),
+            },
+            ensure_ascii=False,
+        )
+
+    mode = str(raw_args.get("mode") or os.getenv("TABLEPET_SKILL_SCRIPT_MODE") or "local").strip().lower()
+    if mode not in {"local", "sandbox"}:
+        mode = "local"
+    if mode == "sandbox":
+        command, sandbox_error = _sandboxed_command(command, root)
+        if command is None:
+            return json.dumps({"error": sandbox_error, "mode": "sandbox"}, ensure_ascii=False)
+
+    extra_args = raw_args.get("args") or []
+    if not isinstance(extra_args, list):
+        extra_args = []
+    safe_args = [str(v) for v in extra_args[:20]]
+    input_text = str(raw_args.get("input") or "")
+    env = {
+        "PATH": os.getenv("PATH", ""),
+        "HOME": str(root),
+        "TABLEPET_SKILL_NAME": str(skill.get("name") or name),
+        "TABLEPET_SKILL_DIR": str(root),
+        "TABLEPET_SCRIPT_MODE": mode,
+    }
+    try:
+        proc = subprocess.run(
+            [*command, *safe_args],
+            cwd=str(root),
+            input=input_text if input_text else None,
+            capture_output=True,
+            text=True,
+            timeout=SKILL_SCRIPT_TIMEOUT_SECONDS,
+            env=env,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return json.dumps(
+            {
+                "error": "Skill 脚本执行超时",
+                "timeout_seconds": SKILL_SCRIPT_TIMEOUT_SECONDS,
+                "mode": mode,
+            },
+            ensure_ascii=False,
+        )
+    except Exception as exc:
+        return json.dumps({"error": f"Skill 脚本启动失败：{exc}", "mode": mode}, ensure_ascii=False)
+
+    return json.dumps(
+        {
+            "ok": proc.returncode == 0,
+            "skill": skill.get("name") or name,
+            "script": str(script.relative_to(root)),
+            "mode": mode,
+            "returncode": proc.returncode,
+            "stdout": _clip(proc.stdout or "", MAX_SCRIPT_OUTPUT_CHARS),
+            "stderr": _clip(proc.stderr or "", MAX_SCRIPT_OUTPUT_CHARS),
+        },
+        ensure_ascii=False,
+    )
 
 
 def _mcp_spec_for_item(item: dict[str, Any]) -> str:
@@ -378,6 +538,32 @@ def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
     skill_tool = skill_tool_spec(user_id)
     if skill_tool:
         tools.append(skill_tool)
+    if any(_skill_allows_script(skill) for skill in list_available_skills(user_id)):
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": SCRIPT_TOOL_NAME,
+                "description": "Run the declared local script for an installed Skill. Only use this after reading the skill with run_skill and only when the Skill index/body indicates script execution is allowed.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Bare Skill identifier from the Skills index."},
+                        "args": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional command-line arguments for the declared script. Do not pass shell syntax.",
+                        },
+                        "input": {"type": "string", "description": "Optional stdin text for the script."},
+                        "mode": {
+                            "type": "string",
+                            "enum": ["local", "sandbox"],
+                            "description": "Execution mode. Use local by default. Use sandbox only when the user asks for best-effort macOS sandboxing.",
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
+        })
     if _has_mcp_tools(user_id):
         tools.append({
             "type": "function",
@@ -428,6 +614,8 @@ def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
 async def dispatch_agent_tool(user_id: str, name: str, arguments: dict[str, Any]) -> str:
     if name == "run_skill":
         return run_skill_tool(user_id, arguments)
+    if name == SCRIPT_TOOL_NAME:
+        return run_skill_script_tool(user_id, arguments)
     if name == "local_music_control":
         from .local_music_control import control_music
 

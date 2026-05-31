@@ -597,6 +597,8 @@ def _split_legacy_collection_items(items: list[dict[str, Any]]) -> bool:
                     "format": "skill_dir",
                     "run_as": skill["run_as"],
                     "allowed_tools": skill["allowed_tools"],
+                    "script": skill.get("script") or "",
+                    "script_runtime": skill.get("script_runtime") or "",
                 },
                 enabled=bool(item.get("enabled")),
             )
@@ -628,6 +630,8 @@ async def api_list_skills() -> dict[str, Any]:
                 "description": skill["description"],
                 "run_as": skill["run_as"],
                 "allowed_tools": skill["allowed_tools"],
+                "script": skill.get("script") or "",
+                "script_runtime": skill.get("script_runtime") or "",
                 "skill_path": skill["path"],
                 "local_path": skill["local_path"],
             })
@@ -670,6 +674,8 @@ def _register_parsed_skills(
                 "format": "skill_dir",
                 "run_as": skill["run_as"],
                 "allowed_tools": skill["allowed_tools"],
+                "script": skill.get("script") or "",
+                "script_runtime": skill.get("script_runtime") or "",
             },
             enabled=enabled,
         ))

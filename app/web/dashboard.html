@@ -5140,7 +5140,7 @@ function extensionCard(item, kind) {
   const displayDesc = kind === 'skill' ? (cfg.collection_description || cfg.display_description || item.description) : item.description;
   const desc = item.parse_error || displayDesc || (kind === 'skill' ? parsedPath : source) || (kind === 'mcp' ? 'MCP server 配置' : '本地 Skill 目录');
   const meta = kind === 'skill'
-    ? [item.run_as ? `runAs: ${item.run_as}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', parsedPath || ''].filter(Boolean).join(' · ')
+    ? [item.run_as ? `runAs: ${item.run_as}` : '', item.script ? `script: ${item.script_runtime || 'auto'} ${item.script}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', parsedPath || ''].filter(Boolean).join(' · ')
     : source;
   return `
     <div class="skill-card installed">
@@ -5199,7 +5199,7 @@ function renderSkillGroup(group) {
             <div class="skill-child-head">
               <div>
                 <div class="skill-name">${escapeHtml(item.name || '未命名 Skill')}</div>
-                <div class="skill-meta">${escapeHtml([item.run_as ? `runAs: ${item.run_as}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', item.skill_path || ''].filter(Boolean).join(' · '))}</div>
+                <div class="skill-meta">${escapeHtml([item.run_as ? `runAs: ${item.run_as}` : '', item.script ? `script: ${item.script_runtime || 'auto'} ${item.script}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', item.skill_path || ''].filter(Boolean).join(' · '))}</div>
               </div>
               <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
             </div>

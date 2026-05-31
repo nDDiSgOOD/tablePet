@@ -61,7 +61,7 @@ TablePet 的记忆不是只把历史对话塞进 prompt。
 
 ### Skill
 
-Skill 是本地可安装的能力说明书。Agent 默认只看到 Skill 索引，需要时再通过 `run_skill` 读取正文。
+Skill 是本地可安装的能力说明书。Agent 默认只看到 Skill 索引，需要时再通过 `run_skill` 读取正文。若 Skill 明确声明脚本入口，也可以通过 `run_skill_script` 运行本地脚本。
 
 支持来源：
 
@@ -251,6 +251,30 @@ writer - Help draft and polish short Chinese copy
   }
 }
 ```
+
+### Script Skills
+
+默认情况下，Skill 只会被读取，不会执行代码。要让 Skill 运行本地脚本，必须在 `SKILL.md` frontmatter 里显式声明：
+
+```markdown
+---
+name: data_cleaner
+description: Clean a CSV file with the bundled Python script
+allowed-tools: run_skill_script
+script: scripts/clean.py
+script-runtime: python
+---
+
+Use this skill when the user wants to clean a local CSV. Ask for the file path first, then run the declared script with that path as an argument.
+```
+
+限制：
+
+- `script` 必须是 Skill 目录内的相对路径，不能使用绝对路径或 `..` 跳出目录。
+- 支持运行时：`python`、`node`、`bash`、`sh`。
+- 默认运行模式是 `local`，也就是在启动 TablePet 的本机进程里开子进程执行。
+- 可以通过工具参数或环境变量 `TABLEPET_SKILL_SCRIPT_MODE=sandbox` 使用 macOS `sandbox-exec` 的 best-effort 沙箱。
+- 沙箱模式不是完整容器隔离。更强隔离建议接 Docker、Firecracker、nsjail 或远端执行服务。
 
 ---
 
