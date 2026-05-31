@@ -10,7 +10,7 @@ import asyncio
 
 from fastapi import FastAPI
 
-from .routers import asr, chat, dashboard, health, interactions, llm_account, memory, music, personas, telemetry, tts, ui_settings, vision
+from .routers import agent_extensions, asr, chat, dashboard, health, interactions, llm_account, memory, music, personas, telemetry, tts, ui_settings, vision
 from .services.scheduler import start_scheduler, stop_scheduler
 from .usb.bridge import start_usb_bridge_thread
 
@@ -31,6 +31,7 @@ app.include_router(memory.router)
 app.include_router(ui_settings.router)
 app.include_router(llm_account.router)
 app.include_router(personas.router)
+app.include_router(agent_extensions.router)
 
 
 @app.on_event("startup")

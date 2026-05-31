@@ -227,14 +227,20 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
         "node_llm persona=%s mode_random=%s user=%s",
         persona_id, is_random_mode, state.get("user_id"),
     )
-    system = persona + "\n\n" + system_block if system_block else persona
+    user_id = state.get("user_id") or "tablepet"
+    try:
+        from ..services.agent_extensions import build_agent_extension_context
+        extension_context = build_agent_extension_context(user_id)
+    except Exception:
+        extension_context = ""
+    context_parts = [p for p in (system_block, extension_context) if p]
+    system = persona + ("\n\n" + "\n\n".join(context_parts) if context_parts else "")
 
     history = state.get("history") or []
     messages = [{"role": "system", "content": system}, *history, {"role": "user", "content": text}]
 
     total_tokens = count_messages_tokens(messages)
     if total_tokens > MEMORY_CONTEXT_BUDGET_TOKENS:
-        user_id = state.get("user_id") or "tablepet"
         try:
             await summarize_to_short_term(user_id, force=True)
         except Exception:
@@ -242,7 +248,8 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
         from ..services.memory_recall import load_memory_context
 
         ctx = await load_memory_context(user_id, query_text=text)
-        system = persona + "\n\n" + ctx.to_system_block()
+        context_parts = [p for p in (ctx.to_system_block(), extension_context) if p]
+        system = persona + ("\n\n" + "\n\n".join(context_parts) if context_parts else "")
         history = ctx.to_messages(include_ephemeral=True)
         messages = [
             {"role": "system", "content": system},
@@ -250,7 +257,6 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
             {"role": "user", "content": text},
         ]
 
-    user_id = state.get("user_id") or "tablepet"
     started = _time.perf_counter()
     try:
         resp = await call_deepseek_messages(

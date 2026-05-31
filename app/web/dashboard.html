@@ -1540,7 +1540,29 @@
     /* 兼容老的 chat-wrap / chat-input / chat-options 选择器 */
     .chat-wrap { display:flex; flex-direction:column; }
 
-    /* ========== 技能 ========== */
+    /* ========== Agent 扩展 ========== */
+    .extension-layout {
+      display:grid;
+      grid-template-columns:minmax(280px, 360px) 1fr;
+      gap:var(--s-4);
+      align-items:start;
+    }
+    .extension-form {
+      display:flex; flex-direction:column; gap:var(--s-3);
+    }
+    .extension-form label {
+      display:flex; flex-direction:column; gap:6px;
+      color:var(--muted); font-size:var(--fs-sm);
+    }
+    .extension-form textarea {
+      min-height:130px;
+      resize:vertical;
+    }
+    .extension-list {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+      gap:var(--s-3);
+    }
     .skill-card {
       padding:var(--s-4);
       background:var(--panel);
@@ -1557,6 +1579,9 @@
     .skill-desc { color:var(--muted); font-size:var(--fs-md); min-height:36px; line-height:1.5; }
     .skill-actions { display:flex; gap:6px; margin-top:var(--s-2); }
     .skill-actions .btn { padding:5px var(--s-3); font-size:var(--fs-md); }
+    @media (max-width: 980px) {
+      .extension-layout { grid-template-columns:1fr; }
+    }
     .toolbar {
       display:flex; gap:var(--s-2); margin-bottom:var(--s-4);
       flex-wrap:wrap; align-items:center;
@@ -2449,9 +2474,13 @@
         <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>
         宠物日记
       </div>
-      <div class="navitem" data-page="skills" data-title="宠物校园">
+      <div class="navitem" data-page="skills" data-title="Skill 管理">
         <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 3 8l9 4 9-4-9-4z"/><path d="M3 8v5c0 1.7 4 3 9 3s9-1.3 9-3V8"/><path d="M12 12v7"/></svg></span>
-        宠物校园
+        Skill 管理
+      </div>
+      <div class="navitem" data-page="mcp" data-title="MCP 管理">
+        <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h6v6H4zM14 4h6v6h-6zM14 14h6v6h-6z"/><path d="M10 10h2a2 2 0 0 0 2-2M10 10h2a2 2 0 0 1 2 2v2"/></svg></span>
+        MCP 管理
       </div>
       <div class="navitem" data-page="memory" data-title="记忆管理">
         <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg></span>
@@ -2947,27 +2976,105 @@
       </div>
     </section>
 
-    <!-- ====== 6. 技能学习 ====== -->
+    <!-- ====== 6. Skill 管理 ====== -->
     <section id="page-skills" class="page">
-      <h2 class="page-title">宠物校园</h2>
-      <div class="page-sub">桌宠的小学校。挂载新本领、装上 MCP 工具，每一项技能都是它能为你做的事。</div>
+      <h2 class="page-title">Skill 管理</h2>
+      <div class="page-sub">给 agent 装可复用的说明和能力包。本地文件会在每次对话前重新读取，GitHub 和 URL 会在安装时缓存。</div>
 
-      <div class="toolbar">
-        <input id="skillSearch" placeholder="搜索可用技能...">
-        <select id="skillFilter">
-          <option value="all">全部</option>
-          <option value="installed">已安装</option>
-          <option value="available">未安装</option>
-          <option value="mcp">MCP 协议</option>
-          <option value="builtin">内置</option>
-        </select>
-        <button class="btn primary" id="addMcpBtn">+ 添加 MCP 服务器</button>
+      <div class="extension-layout">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">安装 Skill</div>
+          </div>
+          <form id="skillForm" class="extension-form" autocomplete="off">
+            <label>名称
+              <input name="name" placeholder="例如：代码审查助手">
+            </label>
+            <label>来源
+              <select name="source_type">
+                <option value="local_file">本地文件</option>
+                <option value="github_url">GitHub / Raw URL</option>
+                <option value="url">普通 URL</option>
+                <option value="inline">手写内容</option>
+              </select>
+            </label>
+            <label>路径或 URL
+              <input name="source_uri" placeholder="/Users/me/skill.md 或 https://github.com/...">
+            </label>
+            <label>说明
+              <input name="description" placeholder="这个 skill 适合什么时候使用">
+            </label>
+            <label>手写内容
+              <textarea name="content" placeholder="选择“手写内容”时填写。也可以粘贴临时 skill 说明。"></textarea>
+            </label>
+            <button class="btn primary" type="submit">安装 Skill</button>
+          </form>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">已安装 Skill</div>
+            <button class="btn" id="refreshSkillBtn" type="button">刷新</button>
+          </div>
+          <div class="extension-list" id="skillGrid"></div>
+        </div>
       </div>
-
-      <div class="grid grid-3" id="skillGrid"></div>
     </section>
 
-    <!-- ====== 7. 账户情况 ====== -->
+    <!-- ====== 7. MCP 管理 ====== -->
+    <section id="page-mcp" class="page">
+      <h2 class="page-title">MCP 管理</h2>
+      <div class="page-sub">配置 agent 可用的 MCP server。支持 stdio、HTTP 和 SSE，也可以从本地文件或 GitHub 导入 JSON 配置。</div>
+
+      <div class="extension-layout">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">添加 MCP Server</div>
+          </div>
+          <form id="mcpForm" class="extension-form" autocomplete="off">
+            <label>名称
+              <input name="name" placeholder="例如：filesystem">
+            </label>
+            <label>传输方式
+              <select name="transport">
+                <option value="stdio">stdio</option>
+                <option value="http">HTTP</option>
+                <option value="sse">SSE</option>
+              </select>
+            </label>
+            <label>启动命令（stdio）
+              <input name="command" placeholder="npx -y @modelcontextprotocol/server-filesystem /Users/me">
+            </label>
+            <label>服务地址（HTTP/SSE）
+              <input name="url" placeholder="http://localhost:3001/mcp">
+            </label>
+            <label>导入来源
+              <select name="source_type">
+                <option value="inline">手写 JSON</option>
+                <option value="local_file">本地 JSON 文件</option>
+                <option value="github_url">GitHub / Raw URL</option>
+                <option value="url">普通 URL</option>
+              </select>
+            </label>
+            <label>配置路径或 URL
+              <input name="source_uri" placeholder="/Users/me/mcp.json 或 https://github.com/...">
+            </label>
+            <label>JSON 配置
+              <textarea name="content" placeholder='{"env":{"GITHUB_TOKEN":"..."}}'></textarea>
+            </label>
+            <button class="btn primary" type="submit">添加 MCP</button>
+          </form>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">已配置 MCP</div>
+            <button class="btn" id="refreshMcpBtn" type="button">刷新</button>
+          </div>
+          <div class="extension-list" id="mcpGrid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 8. 账户情况 ====== -->
     <section id="page-account" class="page">
       <h2 class="page-title">账户情况</h2>
       <div class="page-sub">配置 LLM 账号、查看用量趋势。改完立即生效，无需重启。</div>
@@ -4588,96 +4695,123 @@ async function loadGreeting() {
 }
 
 /* =====================================================================
-   6) 技能学习
+   6) Agent 扩展：Skill / MCP
    --------------------------------------------------------------------
-   API: GET    /api/skills                       ->  { skills:[{id,name,type,desc,installed,enabled,...}] }
-   API: POST   /api/skills        { ... }        ->  { ok, skill }    type: builtin/mcp，安装/添加
-   API: DELETE /api/skills/{id}                  ->  { ok }
-   API: POST   /api/skills/{id}/toggle           ->  { ok, enabled }
+   API: GET    /api/skills          -> { skills:[...] }
+   API: POST   /api/skills          -> { ok, skill }
+   API: DELETE /api/skills/{id}     -> { ok }
+   API: POST   /api/skills/{id}/toggle
+   API: GET    /api/mcp             -> { servers:[...] }
    ===================================================================== */
-const MOCK_SKILLS = [
-  { id:'weather', name:'天气查询', type:'builtin', desc:'通过 wttr.in 实时查询天气', installed:true, enabled:true },
-  { id:'memory',  name:'长期记忆', type:'builtin', desc:'记住用户偏好和最近对话', installed:true, enabled:true },
-  { id:'music-jay', name:'周杰伦点歌', type:'builtin', desc:'本地周杰伦曲库随机播放', installed:true, enabled:true },
-  { id:'mcp-fs', name:'MCP: 文件系统', type:'mcp', desc:'让 TablePet 读写本地文件（需配置 MCP server）', installed:false, enabled:false },
-  { id:'mcp-github', name:'MCP: GitHub', type:'mcp', desc:'查 issue / 提 PR / 看仓库动态', installed:false, enabled:false },
-  { id:'mcp-calendar', name:'MCP: 日历', type:'mcp', desc:'安排日程、提醒事项', installed:false, enabled:false },
-  { id:'face-recognize', name:'人脸记忆', type:'builtin', desc:'记住每张脸对应的称呼', installed:false, enabled:false },
-  { id:'wake-word', name:'自定义唤醒词', type:'builtin', desc:'训练个性化唤醒词模型', installed:false, enabled:false },
-];
 let _skills = [];
+let _mcpServers = [];
 async function refreshSkills() {
+  const grid = $('skillGrid');
+  if (!grid) return;
   try {
     const r = await api('GET', '/api/skills');
     _skills = r.skills || [];
-  } catch {
-    _skills = MOCK_SKILLS.map(s => ({...s}));
-  }
+  } catch { _skills = []; }
   renderSkills();
 }
-function renderSkills() {
-  const q = $('skillSearch').value.trim().toLowerCase();
-  const f = $('skillFilter').value;
-  const list = _skills.filter(s => {
-    if (q && !(s.name + s.desc).toLowerCase().includes(q)) return false;
-    if (f === 'installed' && !s.installed) return false;
-    if (f === 'available' && s.installed) return false;
-    if (f === 'mcp' && s.type !== 'mcp') return false;
-    if (f === 'builtin' && s.type !== 'builtin') return false;
-    return true;
-  });
-  $('skillGrid').innerHTML = list.length ? list.map(s => `
-    <div class="skill-card ${s.installed?'installed':''}">
+async function refreshMcp() {
+  const grid = $('mcpGrid');
+  if (!grid) return;
+  try {
+    const r = await api('GET', '/api/mcp');
+    _mcpServers = r.servers || [];
+  } catch { _mcpServers = []; }
+  renderMcp();
+}
+function extensionCard(item, kind) {
+  const source = [item.source_type, item.source_uri].filter(Boolean).join(' · ');
+  const desc = item.description || source || (kind === 'mcp' ? 'MCP server 配置' : 'Skill 内容');
+  return `
+    <div class="skill-card installed">
       <div class="skill-head">
         <div>
-          <div class="skill-name">${escapeHtml(s.name)}</div>
-          <div class="skill-type">${s.type==='mcp'?'🔌 MCP':'⚙️ 内置'} · ${escapeHtml(s.id)}</div>
+          <div class="skill-name">${escapeHtml(item.name || '未命名扩展')}</div>
+          <div class="skill-type">${kind === 'mcp' ? 'MCP' : 'Skill'} · #${escapeHtml(item.id)}</div>
         </div>
-        ${s.installed ? `<span class="badge ${s.enabled?'ok':'muted'}">${s.enabled?'启用':'停用'}</span>` : '<span class="badge warn">未安装</span>'}
+        <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
       </div>
-      <div class="skill-desc">${escapeHtml(s.desc)}</div>
+      <div class="skill-desc">${escapeHtml(desc)}</div>
       <div class="skill-actions">
-        ${s.installed
-          ? `<button class="btn" data-toggle="${s.id}">${s.enabled?'停用':'启用'}</button>
-             <button class="btn danger" data-uninstall="${s.id}">卸载</button>`
-          : `<button class="btn primary" data-install="${s.id}">安装</button>`}
+        <button class="btn" data-toggle-${kind}="${item.id}">${item.enabled?'停用':'启用'}</button>
+        <button class="btn danger" data-delete-${kind}="${item.id}">卸载</button>
       </div>
-    </div>`).join('') : '<div class="empty">没有符合条件的技能</div>';
-
-  $('skillGrid').querySelectorAll('[data-install]').forEach(b => b.addEventListener('click', async () => {
-    const id = b.dataset.install;
-    try { await api('POST', '/api/skills', { id }); } catch {}
-    const sk = _skills.find(x => x.id === id);
-    if (sk) { sk.installed = true; sk.enabled = true; }
-    toast(`已安装 ${id}`); renderSkills();
+    </div>`;
+}
+function renderSkills() {
+  const grid = $('skillGrid');
+  if (!grid) return;
+  grid.innerHTML = _skills.length
+    ? _skills.map(s => extensionCard(s, 'skill')).join('')
+    : '<div class="empty">还没有安装 Skill。可以从本地文件、GitHub、URL 或手写内容开始。</div>';
+  grid.querySelectorAll('[data-delete-skill]').forEach(b => b.addEventListener('click', async () => {
+    await api('DELETE', `/api/skills/${encodeURIComponent(b.dataset.deleteSkill)}`);
+    toast('已卸载 Skill');
+    refreshSkills();
   }));
-  $('skillGrid').querySelectorAll('[data-uninstall]').forEach(b => b.addEventListener('click', async () => {
-    const id = b.dataset.uninstall;
-    try { await api('DELETE', `/api/skills/${encodeURIComponent(id)}`); } catch {}
-    const sk = _skills.find(x => x.id === id);
-    if (sk) { sk.installed = false; sk.enabled = false; }
-    toast(`已卸载 ${id}`); renderSkills();
-  }));
-  $('skillGrid').querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', async () => {
-    const id = b.dataset.toggle;
-    try { await api('POST', `/api/skills/${encodeURIComponent(id)}/toggle`); } catch {}
-    const sk = _skills.find(x => x.id === id);
-    if (sk) sk.enabled = !sk.enabled;
-    toast(`已${sk?.enabled?'启用':'停用'}`); renderSkills();
+  grid.querySelectorAll('[data-toggle-skill]').forEach(b => b.addEventListener('click', async () => {
+    await api('POST', `/api/skills/${encodeURIComponent(b.dataset.toggleSkill)}/toggle`);
+    refreshSkills();
   }));
 }
-$('skillSearch').addEventListener('input', renderSkills);
-$('skillFilter').addEventListener('change', renderSkills);
-$('addMcpBtn').addEventListener('click', async () => {
-  const url = prompt('输入 MCP server 地址：\n(例如: stdio://node ./mcp-server.js  或  http://localhost:3001)');
-  if (!url) return;
-  const name = prompt('给这个技能起个名字：') || url;
-  // API: POST /api/skills  { type:'mcp', name, url }
-  try { await api('POST', '/api/skills', { type:'mcp', name, url }); }
-  catch {}
-  _skills.push({ id:`mcp-${Date.now()}`, name, type:'mcp', desc:url, installed:true, enabled:true });
-  toast('已添加 MCP 服务器'); renderSkills();
+function renderMcp() {
+  const grid = $('mcpGrid');
+  if (!grid) return;
+  grid.innerHTML = _mcpServers.length
+    ? _mcpServers.map(s => extensionCard(s, 'mcp')).join('')
+    : '<div class="empty">还没有配置 MCP server。支持 stdio、HTTP、SSE，也可以从 JSON 配置导入。</div>';
+  grid.querySelectorAll('[data-delete-mcp]').forEach(b => b.addEventListener('click', async () => {
+    await api('DELETE', `/api/mcp/${encodeURIComponent(b.dataset.deleteMcp)}`);
+    toast('已删除 MCP');
+    refreshMcp();
+  }));
+  grid.querySelectorAll('[data-toggle-mcp]').forEach(b => b.addEventListener('click', async () => {
+    await api('POST', `/api/mcp/${encodeURIComponent(b.dataset.toggleMcp)}/toggle`);
+    refreshMcp();
+  }));
+}
+const skillForm = $('skillForm');
+if (skillForm) skillForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const f = ev.currentTarget;
+  try {
+    await api('POST', '/api/skills', {
+      name: f.elements.name.value.trim(),
+      source_type: f.elements.source_type.value,
+      source_uri: f.elements.source_uri.value.trim(),
+      description: f.elements.description.value.trim(),
+      content: f.elements.content.value.trim(),
+    });
+    f.reset();
+    toast('已安装 Skill');
+    refreshSkills();
+  } catch (e) { toast('安装失败：' + e.message, 'error'); }
 });
+const mcpForm = $('mcpForm');
+if (mcpForm) mcpForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const f = ev.currentTarget;
+  try {
+    await api('POST', '/api/mcp', {
+      name: f.elements.name.value.trim(),
+      transport: f.elements.transport.value,
+      command: f.elements.command.value.trim(),
+      url: f.elements.url.value.trim(),
+      source_type: f.elements.source_type.value,
+      source_uri: f.elements.source_uri.value.trim(),
+      content: f.elements.content.value.trim(),
+    });
+    f.reset();
+    toast('已添加 MCP');
+    refreshMcp();
+  } catch (e) { toast('添加失败：' + e.message, 'error'); }
+});
+$('refreshSkillBtn')?.addEventListener('click', refreshSkills);
+$('refreshMcpBtn')?.addEventListener('click', refreshMcp);
 
 /* =====================================================================
    人格切换（数据驱动 —— 选项来自 /api/personas，新增人格不需要改前端）
@@ -5879,6 +6013,7 @@ async function bootstrap() {
   refreshMemory();
   refreshDevice();
   refreshSkills();
+  refreshMcp();
   refreshCalendar();
   // 月份选择器在这里第一次填充：此时 _acctViewYear/_acctViewMonth 已经初始化
   if (typeof _populateAcctPicker === 'function') _populateAcctPicker();

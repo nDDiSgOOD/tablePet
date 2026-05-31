@@ -263,6 +263,26 @@ CREATE TABLE IF NOT EXISTS llm_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_user_time ON llm_usage(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_usage_user_purpose ON llm_usage(user_id, purpose);
+
+-- Agent 扩展：Skill 与 MCP 都落在这里，避免前端 mock。
+-- kind: skill / mcp
+-- source_type: inline / local_file / github_url / url / mcp_config
+CREATE TABLE IF NOT EXISTS agent_extension (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      TEXT NOT NULL,
+    kind         TEXT NOT NULL DEFAULT 'skill',
+    name         TEXT NOT NULL DEFAULT '',
+    description  TEXT NOT NULL DEFAULT '',
+    source_type  TEXT NOT NULL DEFAULT 'inline',
+    source_uri   TEXT NOT NULL DEFAULT '',
+    content      TEXT NOT NULL DEFAULT '',
+    config_json  TEXT NOT NULL DEFAULT '{}',
+    enabled      INTEGER NOT NULL DEFAULT 1,
+    created_at   REAL NOT NULL DEFAULT 0,
+    updated_at   REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_agent_extension_user_kind
+    ON agent_extension(user_id, kind, enabled);
 """
 
 
