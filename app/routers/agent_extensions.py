@@ -90,6 +90,21 @@ def _jsonrpc_message(req_id: int, method: str, params: dict[str, Any] | None = N
     return msg
 
 
+def _jsonrpc_notification(method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    msg: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
+    if params is not None:
+        msg["params"] = params
+    return msg
+
+
+def _initialize_message(req_id: int = 1) -> dict[str, Any]:
+    return _jsonrpc_message(req_id, "initialize", {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": {"name": "TablePet", "version": "0.1"},
+    })
+
+
 def _tools_from_result(result: Any) -> list[dict[str, Any]]:
     raw_tools = (result or {}).get("tools") if isinstance(result, dict) else []
     tools: list[dict[str, Any]] = []
@@ -109,18 +124,11 @@ def _tools_from_result(result: Any) -> list[dict[str, Any]]:
     return tools
 
 
-async def _mcp_http_rpc(url: str, req_id: int, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        resp = await client.post(
-            url,
-            headers={
-                "Accept": "application/json, text/event-stream",
-                "Content-Type": "application/json",
-            },
-            json=_jsonrpc_message(req_id, method, params),
-        )
+def _parse_mcp_http_response(resp: httpx.Response) -> dict[str, Any]:
     if resp.status_code >= 400:
         raise HTTPException(status_code=400, detail=f"MCP HTTP 请求失败：HTTP {resp.status_code} {resp.text[:200]}")
+    if resp.status_code == 202 or not resp.content:
+        return {}
     try:
         data = resp.json()
     except ValueError:
@@ -133,18 +141,39 @@ async def _mcp_http_rpc(url: str, req_id: int, method: str, params: dict[str, An
                     break
         else:
             raise HTTPException(status_code=400, detail="MCP HTTP 返回不是 JSON。")
+    if isinstance(data, list):
+        data = next((item for item in data if isinstance(item, dict)), {})
     if isinstance(data, dict) and data.get("error"):
         raise HTTPException(status_code=400, detail=f"MCP 工具请求失败：{data['error']}")
     return data if isinstance(data, dict) else {}
 
 
+async def _mcp_http_session_rpc(url: str, messages: list[dict[str, Any]], target_id: int) -> dict[str, Any]:
+    session_id = ""
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        for message in messages:
+            headers = {
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+            }
+            if session_id:
+                headers["Mcp-Session-Id"] = session_id
+            resp = await client.post(url, headers=headers, json=message)
+            if resp.headers.get("mcp-session-id") and not session_id:
+                session_id = str(resp.headers.get("mcp-session-id") or "")
+            if message.get("id") != target_id:
+                _parse_mcp_http_response(resp)
+                continue
+            return _parse_mcp_http_response(resp)
+    return {}
+
+
 async def _discover_http_tools(url: str) -> list[dict[str, Any]]:
-    await _mcp_http_rpc(url, 1, "initialize", {
-        "protocolVersion": "2024-11-05",
-        "capabilities": {},
-        "clientInfo": {"name": "TablePet", "version": "0.1"},
-    })
-    data = await _mcp_http_rpc(url, 2, "tools/list")
+    data = await _mcp_http_session_rpc(url, [
+        _initialize_message(1),
+        _jsonrpc_notification("notifications/initialized"),
+        _jsonrpc_message(2, "tools/list", {}),
+    ], 2)
     return _tools_from_result(data.get("result"))
 
 
@@ -188,13 +217,10 @@ async def _discover_sse_tools(url: str) -> list[dict[str, Any]]:
                         break
             if not endpoint:
                 raise HTTPException(status_code=400, detail="MCP SSE 未返回 message endpoint。")
-            await client.post(endpoint, json=_jsonrpc_message(1, "initialize", {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "TablePet", "version": "0.1"},
-            }))
+            await client.post(endpoint, json=_initialize_message(1))
             await _read_sse_until(lines, 1)
-            await client.post(endpoint, json=_jsonrpc_message(2, "tools/list"))
+            await client.post(endpoint, json=_jsonrpc_notification("notifications/initialized"))
+            await client.post(endpoint, json=_jsonrpc_message(2, "tools/list", {}))
             data = await _read_sse_until(lines, 2)
             return _tools_from_result(data.get("result"))
 
@@ -264,23 +290,48 @@ async def _discover_mcp_tools(config: dict[str, Any]) -> tuple[list[dict[str, An
     return tools, "connected" if tools else "connected_empty"
 
 
+async def _call_sse_mcp_tool(url: str, tool_name: str, arguments: dict[str, Any]) -> Any:
+    params = {"name": tool_name, "arguments": arguments or {}}
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        async with client.stream("GET", url, headers={"Accept": "text/event-stream"}) as stream:
+            lines = stream.aiter_lines()
+            endpoint = ""
+            async for line in lines:
+                if line.startswith("data:"):
+                    payload = line[5:].strip()
+                    if payload.startswith(("http://", "https://", "/")):
+                        endpoint = urljoin(url, payload)
+                        break
+            if not endpoint:
+                raise HTTPException(status_code=400, detail="MCP SSE 未返回 message endpoint。")
+            init = await client.post(endpoint, json=_initialize_message(1))
+            if init.status_code >= 400:
+                raise HTTPException(status_code=400, detail=f"MCP SSE 初始化失败：HTTP {init.status_code} {init.text[:200]}")
+            await _read_sse_until(lines, 1)
+            await client.post(endpoint, json=_jsonrpc_notification("notifications/initialized"))
+            call = await client.post(endpoint, json=_jsonrpc_message(11, "tools/call", params))
+            if call.status_code >= 400:
+                raise HTTPException(status_code=400, detail=f"MCP SSE 工具调用失败：HTTP {call.status_code} {call.text[:200]}")
+            data = await _read_sse_until(lines, 11)
+            return data.get("result")
+
+
 async def _call_mcp_tool(config: dict[str, Any], tool_name: str, arguments: dict[str, Any]) -> Any:
     params = {"name": tool_name, "arguments": arguments or {}}
     transport = config.get("transport")
     if transport == "http":
-        data = await _mcp_http_rpc(str(config.get("url") or ""), 11, "tools/call", params)
+        data = await _mcp_http_session_rpc(str(config.get("url") or ""), [
+            _initialize_message(1),
+            _jsonrpc_notification("notifications/initialized"),
+            _jsonrpc_message(11, "tools/call", params),
+        ], 11)
         return data.get("result")
     if transport == "sse":
-        # 调试调用走简化路径：部分 SSE 网关支持同 URL POST；不支持时会给出清晰报错。
-        data = await _mcp_http_rpc(str(config.get("url") or ""), 11, "tools/call", params)
-        return data.get("result")
+        return await _call_sse_mcp_tool(str(config.get("url") or ""), tool_name, arguments)
     if transport == "stdio":
         results = await _stdio_rpc(str(config.get("command") or ""), [
-            _jsonrpc_message(1, "initialize", {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "TablePet", "version": "0.1"},
-            }),
+            _initialize_message(1),
+            _jsonrpc_notification("notifications/initialized"),
             _jsonrpc_message(11, "tools/call", params),
         ])
         data = next((r for r in results if r.get("id") == 11), {})
