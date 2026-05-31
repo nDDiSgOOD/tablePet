@@ -352,6 +352,18 @@ def build_mcp_index_context(user_id: str) -> str:
     return "\n".join(lines) if len(lines) > 3 else ""
 
 
+def build_local_music_context() -> str:
+    return "\n".join([
+        "## Local music control",
+        "",
+        "You can control local music apps on this macOS device with `local_music_control`.",
+        "Supported apps: `qq_music` (QQ 音乐), `netease_music` (网易云音乐), or `default` for the current media app.",
+        "Supported actions: `open`, `play_pause`, `next`, `previous`, `set_volume`, `volume_up`, `volume_down`, `list_apps`.",
+        "This first version cannot search for a song or choose a playlist inside QQ 音乐/网易云. If the user asks for a specific song, open the requested app if needed, then explain that precise search/play needs a future app-specific adapter.",
+        "If the tool reports macOS Accessibility permission is missing, tell the user to enable it in System Settings instead of retrying repeatedly.",
+    ])
+
+
 def _has_mcp_tools(user_id: str) -> bool:
     for item in list_enabled_extensions(user_id, "mcp"):
         tools = (item.get("config") or {}).get("tools") or []
@@ -382,12 +394,43 @@ def build_agent_tools(user_id: str) -> list[dict[str, Any]]:
                 },
             },
         })
+    tools.append({
+        "type": "function",
+        "function": {
+            "name": "local_music_control",
+            "description": "Open and control local music apps on macOS, including QQ 音乐 and 网易云音乐. Supports app launch, play/pause, next, previous, and system volume.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app": {
+                        "type": "string",
+                        "enum": ["default", "qq_music", "netease_music"],
+                        "description": "Music app to control. Use default for the current media app when the user does not name QQ 音乐 or 网易云音乐.",
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["list_apps", "open", "play_pause", "next", "previous", "set_volume", "volume_up", "volume_down"],
+                        "description": "Operation to perform. Use open to launch the app; use set_volume with level.",
+                    },
+                    "level": {
+                        "type": "integer",
+                        "description": "Volume level 0-100. Required only when action is set_volume.",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    })
     return tools
 
 
 async def dispatch_agent_tool(user_id: str, name: str, arguments: dict[str, Any]) -> str:
     if name == "run_skill":
         return run_skill_tool(user_id, arguments)
+    if name == "local_music_control":
+        from .local_music_control import control_music
+
+        return control_music(arguments)
     if name == "call_mcp_tool":
         try:
             from ..routers.agent_extensions import _call_mcp_tool
@@ -430,5 +473,6 @@ def build_agent_extension_context(user_id: str) -> str:
     parts = [
         build_skills_index_context(user_id),
         build_mcp_index_context(user_id),
+        build_local_music_context(),
     ]
     return _clip("\n\n".join(parts), MAX_TOTAL_CHARS)
