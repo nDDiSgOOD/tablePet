@@ -66,11 +66,32 @@ async def api_set_persona(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "").strip().lower()
     if mode != RANDOM_MODE and mode not in PERSONAS:
         raise HTTPException(status_code=400, detail=f"unknown persona mode: {mode}")
+    previous_mode = get_setting(DEFAULT_USER_ID, PERSONA_KEY) or DEFAULT_MODE
     set_setting(DEFAULT_USER_ID, PERSONA_KEY, mode)
     effective = resolve_active_persona(mode)
+    rotated_session = None
+    if previous_mode != mode:
+        try:
+            from ..services.memory_summarizer import close_session_with_summary
+            from ..storage import append_system_event
+
+            previous = resolve_active_persona(previous_mode)
+            rotated_session = await close_session_with_summary(DEFAULT_USER_ID)
+            append_system_event(
+                DEFAULT_USER_ID,
+                (
+                    "[系统事件 · 人格切换] 主人刚把桌宠人格从"
+                    f"「{previous.get('label', previous_mode)}」切换为「{effective['label']}」。"
+                    "从下一句开始必须立刻使用新人格的说话方式；旧会话中的 assistant 语气、"
+                    "口头禅、自称和称呼习惯全部只当历史记录，不再作为当前风格参考。"
+                ),
+            )
+        except Exception:
+            rotated_session = None
     return {
         "ok": True,
         "mode": mode,
+        "rotated_session": rotated_session,
         "effective": {
             "id": effective["id"],
             "label": effective["label"],

@@ -5181,9 +5181,10 @@ async function refreshPersonas() {
       const pid = el.dataset.pid;
       try { await api('PUT', '/api/personas/active', { mode: pid }); }
       catch (e) { toast('切换失败：' + e.message, 'error'); return; }
-      toast('已切换人格');
+      toast('已切换人格，新会话已开始');
       closePersonaPopover();   // 选中后自动关闭 popover
       refreshPersonas();
+      loadGreeting();
     };
     el.addEventListener('click', handler);
     el.addEventListener('keydown', (ev) => {
@@ -5202,8 +5203,9 @@ if (_personaToggleEl) _personaToggleEl.addEventListener('change', async (e) => {
     e.target.checked = !on;
     return;
   }
-  toast(on ? '已开启 🎲 随机模式' : '已关闭随机模式');
+  toast(on ? '已开启随机模式，新会话已开始' : '已关闭随机模式，新会话已开始');
   refreshPersonas();
+  loadGreeting();
 });
 
 /* persona popover 开关 */
