@@ -1,4 +1,4 @@
-"""把已启用的 Skill / MCP 转成 agent 可读上下文。"""
+"""把已启用的本地 Skill 目录 / MCP 配置转成 agent 可读上下文。"""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from ..storage.agent_extension import list_enabled_extensions
 
 MAX_SKILL_CHARS = 12_000
 MAX_TOTAL_CHARS = 32_000
+SKILL_ENTRY_FILES = ("SKILL.md", "skill.md", "README.md", "readme.md")
+SKILL_EXTRA_SUFFIXES = (".md", ".txt")
 
 
 def _clip(text: str, limit: int) -> str:
@@ -19,23 +21,57 @@ def _clip(text: str, limit: int) -> str:
     return text[:limit] + "\n...[已截断]"
 
 
-def _latest_local_content(item: dict[str, Any]) -> str:
-    if item.get("source_type") != "local_file" or not item.get("source_uri"):
-        return str(item.get("content") or "")
+def _read_text(path: Path) -> str:
     try:
-        path = Path(str(item["source_uri"])).expanduser()
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def _skill_dir_content(item: dict[str, Any]) -> str:
+    config = item.get("config") or {}
+    local_path = config.get("local_path") or item.get("source_uri")
+    if not local_path:
+        return str(item.get("content") or "")
+    root = Path(str(local_path)).expanduser()
+    if root.is_file():
+        return _read_text(root)
+    if not root.exists() or not root.is_dir():
+        return ""
+
+    chunks: list[str] = []
+    seen: set[Path] = set()
+    for filename in SKILL_ENTRY_FILES:
+        path = root / filename
         if path.exists() and path.is_file():
-            return path.read_text(encoding="utf-8")
-    except OSError:
-        pass
-    return str(item.get("content") or "")
+            text = _read_text(path)
+            if text:
+                chunks.append(f"# {path.name}\n{text}")
+                seen.add(path.resolve())
+
+    if not chunks:
+        for path in sorted(root.rglob("*")):
+            if len(chunks) >= 4:
+                break
+            if not path.is_file() or path.suffix.lower() not in SKILL_EXTRA_SUFFIXES:
+                continue
+            try:
+                resolved = path.resolve()
+            except OSError:
+                continue
+            if resolved in seen or any(part.startswith(".") for part in path.relative_to(root).parts):
+                continue
+            text = _read_text(path)
+            if text:
+                chunks.append(f"# {path.relative_to(root)}\n{text}")
+    return "\n\n".join(chunks)
 
 
 def build_agent_extension_context(user_id: str) -> str:
     """生成 prompt 注入块。
 
-    Skill 目前以"可执行说明 / 能力说明"接入：本地文件会在每次对话前重新读取，
-    GitHub/URL 内容则使用安装时缓存。MCP 先暴露已启用服务器配置，后续可在
+    Skill 以本地目录为唯一运行形态：安装时可以来自本地目录、GitHub/Git 或 ZIP，
+    但 agent 使用时只从本地目录读取。MCP 先暴露已启用服务器配置，后续可在
     tool_call 节点把同一份配置接到真实 MCP client。
     """
     skills = list_enabled_extensions(user_id, "skill")
@@ -47,13 +83,23 @@ def build_agent_extension_context(user_id: str) -> str:
             "Use these installed skills as additional instructions when they match the user's request.",
         ]
         for item in skills:
-            content = _clip(_latest_local_content(item), MAX_SKILL_CHARS)
+            config = item.get("config") or {}
+            local_path = config.get("local_path") or ""
+            content = _clip(_skill_dir_content(item), MAX_SKILL_CHARS)
+            if not content:
+                continue
             desc = str(item.get("description") or "").strip()
             header = f"### {item.get('name') or 'Unnamed Skill'}"
             if desc:
                 header += f"\nDescription: {desc}"
-            lines.append(f"{header}\nSource: {item.get('source_type')} {item.get('source_uri') or ''}\n{content}")
-        parts.append("\n\n".join(lines))
+            lines.append(
+                f"{header}\n"
+                f"Installed directory: {local_path}\n"
+                f"Original source: {item.get('source_type')} {item.get('source_uri') or ''}\n"
+                f"{content}"
+            )
+        if len(lines) > 2:
+            parts.append("\n\n".join(lines))
     if servers:
         lines = [
             "## Enabled MCP Servers",

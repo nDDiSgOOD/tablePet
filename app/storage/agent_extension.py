@@ -44,6 +44,17 @@ def list_enabled_extensions(user_id: str, kind: str | None = None) -> list[dict[
     return [_row_to_dict(r) for r in rows]
 
 
+def get_extension(user_id: str, extension_id: int, kind: str | None = None) -> dict[str, Any] | None:
+    sql = "SELECT * FROM agent_extension WHERE user_id = ? AND id = ?"
+    params: list[Any] = [user_id, extension_id]
+    if kind:
+        sql += " AND kind = ?"
+        params.append(kind)
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+    return _row_to_dict(row) if row is not None else None
+
+
 def upsert_extension(
     user_id: str,
     *,

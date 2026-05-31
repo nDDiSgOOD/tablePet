@@ -24,11 +24,12 @@ MUSIC_CACHE_DIR = CACHE_DIR / "music"
 MEDIA_DIR = APP_DIR / "media"
 JAY_CHOU_DIR = MEDIA_DIR / "jay_chou"
 MODELS_DIR = APP_DIR / "models"
+SKILLS_DIR = APP_DIR / "data" / "skills"
 MEMORY_FILE = CACHE_DIR / "memory.json"
 LATEST_FRAME_PATH = CACHE_DIR / "latest_frame.jpg"
 YUNET_MODEL_PATH = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 
-for directory in (CACHE_DIR, AUDIO_DIR, MUSIC_CACHE_DIR, MEDIA_DIR, JAY_CHOU_DIR, MODELS_DIR):
+for directory in (CACHE_DIR, AUDIO_DIR, MUSIC_CACHE_DIR, MEDIA_DIR, JAY_CHOU_DIR, MODELS_DIR, SKILLS_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
 
