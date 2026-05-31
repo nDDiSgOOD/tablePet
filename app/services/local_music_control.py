@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import platform
 import subprocess
+import sys
 from typing import Any
 
 
@@ -36,6 +37,32 @@ class LocalMusicError(RuntimeError):
     pass
 
 
+def _host_hint() -> str:
+    return (
+        "请给启动 TablePet 后端的本地应用授予辅助功能权限。"
+        "如果你从 Trae 启动，授权对象会是 Trae；如果你用 scripts/run_tablepet_local.command "
+        "或 Terminal 启动，授权对象会是 Terminal。"
+        f" 当前 Python：{sys.executable}"
+    )
+
+
+def _is_permission_error(message: str) -> bool:
+    lowered = message.lower()
+    return any(
+        token in lowered
+        for token in (
+            "not allowed assistive access",
+            "is not allowed",
+            "not authorized",
+            "not authorised",
+            "权限违例",
+            "未获授权",
+            "不被允许",
+            "-10004",
+        )
+    )
+
+
 def _run(args: list[str], *, timeout: float = 5) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
@@ -55,8 +82,8 @@ def _osascript(script: str, *, timeout: float = 5) -> str:
     proc = _run(["osascript", "-e", script], timeout=timeout)
     if proc.returncode != 0:
         msg = (proc.stderr or proc.stdout or "AppleScript 执行失败").strip()
-        if "not allowed assistive access" in msg.lower() or "is not allowed" in msg.lower():
-            msg += "。请在 macOS「系统设置 → 隐私与安全性 → 辅助功能」里允许终端/启动 TablePet 的应用控制电脑。"
+        if _is_permission_error(msg):
+            msg += "。" + _host_hint()
         raise LocalMusicError(msg)
     return (proc.stdout or "").strip()
 
@@ -90,7 +117,12 @@ def _activate_app(app_key: str, app_info: dict[str, str]) -> None:
 def _send_media_key(action: str) -> dict[str, Any]:
     key_code = MEDIA_KEY_CODES[action]
     _osascript(f'tell application "System Events" to key code {key_code}', timeout=5)
-    return {"ok": True, "action": action}
+    return {
+        "ok": True,
+        "action": action,
+        "verified": False,
+        "note": "已向 macOS 发送媒体键，但 macOS 不提供稳定的播放器状态回读，不能确认 QQ 音乐/网易云是否真的开始播放。",
+    }
 
 
 def _get_volume() -> int:

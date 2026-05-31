@@ -360,6 +360,7 @@ def build_local_music_context() -> str:
         "Supported apps: `qq_music` (QQ 音乐), `netease_music` (网易云音乐), or `default` for the current media app.",
         "Supported actions: `open`, `play_pause`, `next`, `previous`, `set_volume`, `volume_up`, `volume_down`, `list_apps`.",
         "This first version cannot search for a song or choose a playlist inside QQ 音乐/网易云. If the user asks for a specific song, open the requested app if needed, then explain that precise search/play needs a future app-specific adapter.",
+        "For play/pause/next/previous, the result may include `verified=false`; in that case say the media key command was sent, but do not claim playback definitely started.",
         "If the tool reports macOS Accessibility permission is missing, tell the user to enable it in System Settings instead of retrying repeatedly.",
     ])
 
