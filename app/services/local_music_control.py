@@ -10,6 +10,9 @@ import json
 import platform
 import subprocess
 import sys
+import tempfile
+import textwrap
+import time
 from typing import Any
 
 
@@ -27,9 +30,15 @@ MUSIC_APPS: dict[str, dict[str, str]] = {
 }
 
 MEDIA_KEY_CODES = {
-    "play_pause": 100,  # F8 / media play-pause on macOS keyboards
-    "previous": 98,    # F7 / previous
-    "next": 101,       # F9 / next
+    "play_pause": 100,  # System Events fallback: F8
+    "previous": 98,    # System Events fallback: F7
+    "next": 101,       # System Events fallback: F9
+}
+
+MEDIA_KEY_SWIFT_CONSTANTS = {
+    "play_pause": "NX_KEYTYPE_PLAY",
+    "previous": "NX_KEYTYPE_PREVIOUS",
+    "next": "NX_KEYTYPE_NEXT",
 }
 
 
@@ -114,14 +123,68 @@ def _activate_app(app_key: str, app_info: dict[str, str]) -> None:
         _open_app(app_key, app_info)
 
 
+def _send_media_key_with_swift(action: str) -> str:
+    constant = MEDIA_KEY_SWIFT_CONSTANTS[action]
+    script = textwrap.dedent(
+        f"""
+        import Cocoa
+        import IOKit.hidsystem
+
+        func postMediaKey(_ key: Int32, _ state: Int32) {{
+            let data1 = (Int(key) << 16) | (Int(state) << 8)
+            let flags = NSEvent.ModifierFlags(rawValue: UInt(Int(state) << 8))
+            if let event = NSEvent.otherEvent(
+                with: .systemDefined,
+                location: .zero,
+                modifierFlags: flags,
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                subtype: 8,
+                data1: data1,
+                data2: -1
+            ), let cg = event.cgEvent {{
+                cg.post(tap: CGEventTapLocation.cghidEventTap)
+            }} else {{
+                fputs("failed to build media key event\\n", stderr)
+                exit(2)
+            }}
+        }}
+
+        postMediaKey({constant}, Int32(NX_KEYDOWN))
+        postMediaKey({constant}, Int32(NX_KEYUP))
+        print("posted")
+        """
+    ).strip()
+    with tempfile.NamedTemporaryFile("w", suffix=".swift", delete=False) as fp:
+        fp.write(script)
+        path = fp.name
+    proc = _run(["/usr/bin/swift", path], timeout=8)
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or "Swift 媒体键事件发送失败").strip()
+        if _is_permission_error(msg):
+            msg += "。" + _host_hint()
+        raise LocalMusicError(msg)
+    return "swift_coregraphics"
+
+
 def _send_media_key(action: str) -> dict[str, Any]:
-    key_code = MEDIA_KEY_CODES[action]
-    _osascript(f'tell application "System Events" to key code {key_code}', timeout=5)
+    method = ""
+    try:
+        method = _send_media_key_with_swift(action)
+    except LocalMusicError as swift_exc:
+        key_code = MEDIA_KEY_CODES[action]
+        try:
+            _osascript(f'tell application "System Events" to key code {key_code}', timeout=5)
+            method = "system_events_fkey"
+        except LocalMusicError as fallback_exc:
+            raise LocalMusicError(f"Swift/CoreGraphics 发送失败：{swift_exc}；System Events 回退也失败：{fallback_exc}") from fallback_exc
     return {
         "ok": True,
         "action": action,
+        "method": method,
         "verified": False,
-        "note": "已向 macOS 发送媒体键，但 macOS 不提供稳定的播放器状态回读，不能确认 QQ 音乐/网易云是否真的开始播放。",
+        "note": "已向 macOS 发送系统媒体键，但 macOS 不提供稳定的播放器状态回读，不能确认 QQ 音乐/网易云是否真的开始播放。",
     }
 
 
@@ -172,6 +235,7 @@ def control_music(raw_args: dict[str, Any]) -> str:
         if action in MEDIA_KEY_CODES:
             if app_info is not None:
                 _activate_app(app_key, app_info)
+                time.sleep(0.4)
             result = _send_media_key(action)
             if app_info is not None:
                 result.update({"app": app_key, "app_label": app_info["label"]})
