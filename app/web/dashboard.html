@@ -1610,6 +1610,33 @@
     }
     .tool-name { font-weight:600; font-size:var(--fs-sm); }
     .tool-desc { color:var(--muted); font-size:var(--fs-xs); line-height:1.5; }
+    .tool-debug {
+      display:none;
+      gap:var(--s-2);
+      margin-top:var(--s-2);
+      padding:var(--s-3);
+      border:1px solid color-mix(in oklch, var(--line) 60%, transparent);
+      border-radius:var(--r-sm);
+      background:color-mix(in oklch, var(--panel) 72%, transparent);
+    }
+    .tool-debug.active { display:grid; }
+    .tool-debug-title { font-size:var(--fs-sm); font-weight:600; color:var(--text); }
+    .tool-debug-field { display:grid; gap:5px; }
+    .tool-debug-label { display:flex; justify-content:space-between; gap:var(--s-2); font-size:var(--fs-xs); color:var(--text-soft); }
+    .tool-debug-required { color:var(--warn); }
+    .tool-debug-help { font-size:var(--fs-xs); color:var(--muted); line-height:1.45; }
+    .tool-debug-result {
+      white-space:pre-wrap;
+      word-break:break-word;
+      font-family:var(--mono);
+      font-size:var(--fs-xs);
+      color:var(--text);
+      background:color-mix(in oklch, var(--panel-2) 72%, transparent);
+      border-radius:var(--r-sm);
+      padding:var(--s-2);
+      max-height:220px;
+      overflow:auto;
+    }
     .skill-actions { display:flex; gap:6px; margin-top:var(--s-2); }
     .skill-actions .btn { padding:5px var(--s-3); font-size:var(--fs-md); }
     .install-progress {
@@ -3053,6 +3080,12 @@
             <label id="skillGithubLabel" style="display:none;">GitHub 仓库地址
               <input name="source_uri" placeholder="owner/repo 或 https://github.com/owner/repo">
             </label>
+            <label>显示名称（可选）
+              <input name="display_name" placeholder="例如：办公文件处理包">
+            </label>
+            <label>备注（可选）
+              <input name="display_description" placeholder="给自己看的用途说明，不影响 Skill 调用名">
+            </label>
             <button class="btn" id="skillPickDirBtn" type="button">选择文件夹</button>
             <button class="btn" id="skillPickZipBtn" type="button" style="display:none;">选择 ZIP</button>
             <div class="small" id="skillPickedHint">还没有选择文件夹</div>
@@ -3086,6 +3119,12 @@
             <div class="panel-title">添加 MCP Server</div>
           </div>
           <form id="mcpForm" class="extension-form" autocomplete="off">
+            <label>显示名称（可选）
+              <input name="name" placeholder="例如：飞书项目 MCP">
+            </label>
+            <label>备注（可选）
+              <input name="description" placeholder="给自己看的用途说明，会展示在 MCP 卡片上">
+            </label>
             <label>传输方式
               <select name="transport">
                 <option value="stdio">stdio</option>
@@ -4776,10 +4815,13 @@ async function refreshMcp() {
   renderMcp();
 }
 function extensionCard(item, kind) {
+  const cfg = item.config || {};
   const localPath = item.config && item.config.local_path ? item.config.local_path : '';
   const source = [item.source_type, item.source_uri].filter(Boolean).join(' · ');
   const parsedPath = item.skill_path || item.local_path || localPath;
-  const desc = item.parse_error || item.description || (kind === 'skill' ? parsedPath : source) || (kind === 'mcp' ? 'MCP server 配置' : '本地 Skill 目录');
+  const displayName = kind === 'skill' ? (cfg.collection_name || cfg.display_name || item.name) : item.name;
+  const displayDesc = kind === 'skill' ? (cfg.collection_description || cfg.display_description || item.description) : item.description;
+  const desc = item.parse_error || displayDesc || (kind === 'skill' ? parsedPath : source) || (kind === 'mcp' ? 'MCP server 配置' : '本地 Skill 目录');
   const meta = kind === 'skill'
     ? [item.run_as ? `runAs: ${item.run_as}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', parsedPath || ''].filter(Boolean).join(' · ')
     : source;
@@ -4787,7 +4829,7 @@ function extensionCard(item, kind) {
     <div class="skill-card installed">
       <div class="skill-head">
         <div>
-          <div class="skill-name">${escapeHtml(item.name || '未命名扩展')}</div>
+          <div class="skill-name">${escapeHtml(displayName || '未命名扩展')}</div>
           <div class="skill-type">${kind === 'mcp' ? 'MCP' : 'Skill'} · #${escapeHtml(item.id)}</div>
         </div>
         <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
@@ -4804,6 +4846,14 @@ function skillGroupKey(item) {
   const cfg = item.config || {};
   return cfg.collection_path || item.source_uri || item.local_path || cfg.local_path || `skill-${item.id}`;
 }
+function skillDisplayName(item) {
+  const cfg = item.config || {};
+  return cfg.collection_name || cfg.display_name || item.name || 'Skill';
+}
+function skillDisplayDescription(item, fallback='') {
+  const cfg = item.config || {};
+  return cfg.collection_description || cfg.display_description || item.description || fallback;
+}
 function renderSkillGroup(group) {
   if (group.items.length === 1) return extensionCard(group.items[0], 'skill');
   const enabledCount = group.items.filter(x => x.enabled).length;
@@ -4819,7 +4869,8 @@ function renderSkillGroup(group) {
         </div>
         <span class="badge ok">集合</span>
       </div>
-      <div class="skill-desc">${escapeHtml(source)}</div>
+      <div class="skill-desc">${escapeHtml(skillDisplayDescription(first, source) || source)}</div>
+      <div class="skill-meta">${escapeHtml(source)}</div>
       <div class="skill-actions">
         <button class="btn" data-bulk-skill="${escapeHtml(ids)}" data-bulk-enabled="true">全部启用</button>
         <button class="btn" data-bulk-skill="${escapeHtml(ids)}" data-bulk-enabled="false">全部停用</button>
@@ -4855,7 +4906,7 @@ function renderSkills() {
     if (!groups.has(key)) {
       groups.set(key, {
         key,
-        title: cfg.collection_path ? (item.source_uri || key.split('/').filter(Boolean).pop() || 'Skill 集合') : (item.name || 'Skill'),
+        title: cfg.collection_path ? skillDisplayName(item) : (item.name || 'Skill'),
         items: [],
       });
     }
@@ -4887,6 +4938,84 @@ function renderSkills() {
     }
   }));
 }
+function schemaType(schema) {
+  if (!schema || typeof schema !== 'object') return 'string';
+  if (schema.type) return Array.isArray(schema.type) ? schema.type[0] : schema.type;
+  if (schema.enum) return 'string';
+  if (schema.properties) return 'object';
+  return 'string';
+}
+function renderToolDebugField(name, schema={}, required=[]) {
+  const type = schemaType(schema);
+  const isRequired = required.includes(name);
+  const desc = schema.description || schema.title || '';
+  const common = `data-param="${escapeHtml(name)}" data-type="${escapeHtml(type)}"`;
+  let control = '';
+  if (schema.enum && Array.isArray(schema.enum)) {
+    control = `<select ${common}>${schema.enum.map(v => `<option value="${escapeHtml(String(v))}">${escapeHtml(String(v))}</option>`).join('')}</select>`;
+  } else if (type === 'boolean') {
+    control = `<label class="switch"><input type="checkbox" ${common}><span></span></label>`;
+  } else if (type === 'number' || type === 'integer') {
+    control = `<input type="number" ${common} placeholder="${escapeHtml(schema.default ?? '')}">`;
+  } else if (type === 'object' || type === 'array') {
+    control = `<textarea rows="4" ${common} placeholder='${type === 'array' ? '[]' : '{}'}'></textarea>`;
+  } else {
+    control = `<input ${common} placeholder="${escapeHtml(schema.default ?? '')}">`;
+  }
+  return `
+    <label class="tool-debug-field">
+      <span class="tool-debug-label">
+        <span>${escapeHtml(name)} · ${escapeHtml(type)}</span>
+        ${isRequired ? '<span class="tool-debug-required">必填</span>' : '<span>可选</span>'}
+      </span>
+      ${control}
+      ${desc ? `<span class="tool-debug-help">${escapeHtml(desc)}</span>` : ''}
+    </label>`;
+}
+function renderToolDebugConsole(server, tool, idx) {
+  const schema = tool.input_schema || tool.inputSchema || {};
+  const properties = schema.properties && typeof schema.properties === 'object' ? schema.properties : {};
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  const fields = Object.keys(properties).length
+    ? Object.entries(properties).map(([name, prop]) => renderToolDebugField(name, prop || {}, required)).join('')
+    : '<div class="skill-meta">这个工具没有声明参数，可以直接运行。</div>';
+  return `
+    <div class="tool-debug" id="mcpDebug-${server.id}-${idx}">
+      <div class="tool-debug-title">调试台：${escapeHtml(tool.name || 'tool')}</div>
+      ${tool.description ? `<div class="tool-desc">${escapeHtml(tool.description)}</div>` : ''}
+      ${fields}
+      <div class="skill-actions">
+        <button class="btn primary" data-run-mcp="${server.id}" data-tool-index="${idx}">运行工具</button>
+      </div>
+      <div class="tool-debug-result" id="mcpDebugResult-${server.id}-${idx}" hidden></div>
+    </div>`;
+}
+function readDebugArguments(panel) {
+  const args = {};
+  panel.querySelectorAll('[data-param]').forEach(input => {
+    const name = input.dataset.param;
+    const type = input.dataset.type || 'string';
+    if (!name) return;
+    if (type === 'boolean') {
+      args[name] = !!input.checked;
+      return;
+    }
+    const raw = (input.value || '').trim();
+    if (!raw) return;
+    if (type === 'number' || type === 'integer') {
+      const n = Number(raw);
+      if (!Number.isNaN(n)) args[name] = type === 'integer' ? Math.trunc(n) : n;
+      return;
+    }
+    if (type === 'object' || type === 'array') {
+      try { args[name] = JSON.parse(raw); }
+      catch { throw new Error(`${name} 需要填写合法 JSON`); }
+      return;
+    }
+    args[name] = raw;
+  });
+  return args;
+}
 function renderMcp() {
   const grid = $('mcpGrid');
   if (!grid) return;
@@ -4908,13 +5037,14 @@ function renderMcp() {
             <div class="skill-desc">${escapeHtml(s.description || source || cfg.last_error || 'MCP server 配置')}</div>
             ${cfg.last_error ? `<div class="skill-meta">错误：${escapeHtml(cfg.last_error)}</div>` : ''}
             <div class="tool-list">
-              ${tools.length ? tools.map(t => `
+              ${tools.length ? tools.map((t, idx) => `
                 <div class="tool-item">
                   <div class="tool-name">${escapeHtml(t.name || 'tool')}</div>
                   <div class="tool-desc">${escapeHtml(t.description || '无说明')}</div>
                   <div class="skill-actions">
-                    <button class="btn" data-debug-mcp="${s.id}" data-tool="${escapeHtml(t.name || '')}">调试工具</button>
+                    <button class="btn" data-open-mcp-debug="${s.id}" data-tool-index="${idx}">打开调试台</button>
                   </div>
+                  ${renderToolDebugConsole(s, t, idx)}
                 </div>
               `).join('') : '<div class="skill-meta">尚未发现工具。可点“刷新工具”重新连接。</div>'}
             </div>
@@ -4944,19 +5074,36 @@ function renderMcp() {
       refreshMcp();
     } catch (e) { toast('刷新失败：' + e.message, 'error'); }
   }));
-  grid.querySelectorAll('[data-debug-mcp]').forEach(b => b.addEventListener('click', async () => {
-    const raw = prompt(`调试工具 ${b.dataset.tool}，请输入 JSON 参数：`, '{}');
-    if (raw === null) return;
+  grid.querySelectorAll('[data-open-mcp-debug]').forEach(b => b.addEventListener('click', () => {
+    const panel = $(`mcpDebug-${b.dataset.openMcpDebug}-${b.dataset.toolIndex}`);
+    if (panel) panel.classList.toggle('active');
+  }));
+  grid.querySelectorAll('[data-run-mcp]').forEach(b => b.addEventListener('click', async () => {
+    const server = _mcpServers.find(x => String(x.id) === String(b.dataset.runMcp));
+    const tool = (server?.config?.tools || [])[Number(b.dataset.toolIndex || 0)];
+    const panel = $(`mcpDebug-${b.dataset.runMcp}-${b.dataset.toolIndex}`);
+    const resultEl = $(`mcpDebugResult-${b.dataset.runMcp}-${b.dataset.toolIndex}`);
+    if (!server || !tool || !panel) return;
     let args = {};
-    try { args = JSON.parse(raw || '{}'); }
-    catch { toast('参数不是合法 JSON', 'error'); return; }
     try {
-      const r = await api('POST', `/api/mcp/${encodeURIComponent(b.dataset.debugMcp)}/debug-tool`, {
-        tool_name: b.dataset.tool,
+      args = readDebugArguments(panel);
+      if (resultEl) {
+        resultEl.hidden = false;
+        resultEl.textContent = '运行中...';
+      }
+      const r = await api('POST', `/api/mcp/${encodeURIComponent(server.id)}/debug-tool`, {
+        tool_name: tool.name,
         arguments: args,
       });
-      alert(JSON.stringify(r.result, null, 2));
-    } catch (e) { toast('调试失败：' + e.message, 'error'); }
+      if (resultEl) resultEl.textContent = JSON.stringify(r.result, null, 2);
+      toast('工具运行完成');
+    } catch (e) {
+      if (resultEl) {
+        resultEl.hidden = false;
+        resultEl.textContent = '调试失败：' + e.message;
+      }
+      toast('调试失败：' + e.message, 'error');
+    }
   }));
 }
 function arrayBufferToBase64(buffer) {
@@ -5039,6 +5186,8 @@ if (skillForm) skillForm.addEventListener('submit', async (ev) => {
     if (source === 'github_repo') {
       setSkillInstallProgress(28, '正在拉取 GitHub 仓库...');
       result = await api('POST', '/api/skills', {
+        name: f.elements.display_name.value.trim(),
+        description: f.elements.display_description.value.trim(),
         source_type: 'github_repo',
         source_uri: f.elements.source_uri.value.trim(),
       });
@@ -5050,6 +5199,8 @@ if (skillForm) skillForm.addEventListener('submit', async (ev) => {
       setSkillInstallProgress(55, '正在上传并解压 ZIP...');
       result = await api('POST', '/api/skills/upload', {
         source_type: 'zip_upload',
+        name: f.elements.display_name.value.trim(),
+        description: f.elements.display_description.value.trim(),
         zip_data,
       });
     } else {
@@ -5060,6 +5211,8 @@ if (skillForm) skillForm.addEventListener('submit', async (ev) => {
       setSkillInstallProgress(55, '正在上传并解析目录...');
       result = await api('POST', '/api/skills/upload', {
         source_type: 'local_dir_upload',
+        name: f.elements.display_name.value.trim(),
+        description: f.elements.display_description.value.trim(),
         files: uploadFiles,
       });
     }
@@ -5088,6 +5241,8 @@ if (mcpForm) mcpForm.addEventListener('submit', async (ev) => {
     setMcpInstallProgress(15, '正在准备 MCP 配置...');
     setMcpInstallProgress(42, transport === 'stdio' ? '正在启动并握手 stdio server...' : '正在连接 MCP server...');
     const r = await api('POST', '/api/mcp', {
+      name: f.elements.name.value.trim(),
+      description: f.elements.description.value.trim(),
       transport,
       command: transport === 'stdio' ? address : '',
       url: transport === 'stdio' ? '' : address,

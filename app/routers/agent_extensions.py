@@ -52,6 +52,8 @@ class SkillUploadFile(BaseModel):
 
 class SkillUploadPayload(BaseModel):
     source_type: SkillUploadSourceType
+    name: str = Field(default="", max_length=120)
+    description: str = Field(default="", max_length=500)
     files: list[SkillUploadFile] = Field(default_factory=list)
     zip_data: str = Field(default="", max_length=50_000_000)
     enabled: bool = True
@@ -539,6 +541,8 @@ def _split_legacy_collection_items(items: list[dict[str, Any]]) -> bool:
                     "local_path": skill["local_path"],
                     "skill_path": skill["path"],
                     "collection_path": collection_path,
+                    "collection_name": config.get("collection_name") or item.get("name") or "",
+                    "collection_description": config.get("collection_description") or item.get("description") or "",
                     "format": "skill_dir",
                     "run_as": skill["run_as"],
                     "allowed_tools": skill["allowed_tools"],
@@ -585,6 +589,8 @@ def _register_parsed_skills(
     source_type: str,
     source_uri: str,
     enabled: bool,
+    display_name: str = "",
+    display_description: str = "",
 ) -> list[dict[str, Any]]:
     parsed = _parsed_skills_from_root(root, source_type, source_uri)
     if not parsed:
@@ -593,6 +599,8 @@ def _register_parsed_skills(
             detail="没有识别到合法 Skill。请确认目录包含 SKILL.md、<name>.md，或 skills/<skill-name>/SKILL.md。",
         )
     registered: list[dict[str, Any]] = []
+    collection_name = display_name.strip()
+    collection_description = display_description.strip()
     for skill in parsed:
         registered.append(upsert_extension(
             DEFAULT_USER_ID,
@@ -606,6 +614,8 @@ def _register_parsed_skills(
                 "local_path": skill["local_path"],
                 "skill_path": skill["path"],
                 "collection_path": str(root),
+                "collection_name": collection_name,
+                "collection_description": collection_description,
                 "format": "skill_dir",
                 "run_as": skill["run_as"],
                 "allowed_tools": skill["allowed_tools"],
@@ -623,6 +633,8 @@ async def api_create_skill(payload: SkillPayload) -> dict[str, Any]:
         source_type=payload.source_type,
         source_uri=payload.source_uri.strip(),
         enabled=payload.enabled,
+        display_name=payload.name,
+        display_description=payload.description,
     )
     return {"ok": True, "skills": skills, "count": len(skills)}
 
@@ -635,6 +647,8 @@ async def api_upload_skill(payload: SkillUploadPayload) -> dict[str, Any]:
         source_type=payload.source_type,
         source_uri="",
         enabled=payload.enabled,
+        display_name=payload.name,
+        display_description=payload.description,
     )
     return {"ok": True, "skills": skills, "count": len(skills)}
 
