@@ -83,7 +83,7 @@ def _full_chat_url(base: str) -> str:
 
 
 async def call_deepseek_messages(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     model: str | None = None,
     temperature: float = 0.68,
@@ -92,6 +92,8 @@ async def call_deepseek_messages(
     purpose: str = "chat",
     turn_id: int | None = None,
     session_id: int | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | dict[str, Any] | None = None,
 ) -> Any:
     """主对话 / 总结类调用统一入口。返回原始 DeepSeek JSON。
 
@@ -113,6 +115,17 @@ async def call_deepseek_messages(
     err_text = ""
     resp_json: Any = None
     try:
+        payload: dict[str, Any] = {
+            "model": real_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "thinking": {"type": "disabled"},
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = tool_choice or "auto"
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
                 url,
@@ -120,14 +133,7 @@ async def call_deepseek_messages(
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": real_model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "stream": False,
-                    "thinking": {"type": "disabled"},
-                },
+                json=payload,
             )
         if response.status_code != 200:
             err_text = response.text[:300]

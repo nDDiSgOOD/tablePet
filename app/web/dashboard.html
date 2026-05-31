@@ -1452,6 +1452,16 @@
       border-bottom-left-radius:6px;
       box-shadow:var(--shadow-card);
     }
+    .msg.msg-thinking .bubble {
+      color:var(--text-soft);
+    }
+    .chat-progress {
+      display:block;
+      margin-top:4px;
+      font-size:var(--fs-xs);
+      color:var(--muted);
+      line-height:1.45;
+    }
     /* 系统/错误/提示 */
     .msg.msg-system .bubble, .msg.system .bubble {
       background:var(--warn-soft);
@@ -1540,7 +1550,152 @@
     /* 兼容老的 chat-wrap / chat-input / chat-options 选择器 */
     .chat-wrap { display:flex; flex-direction:column; }
 
-    /* ========== 技能 ========== */
+    /* ========== Agent 扩展 ========== */
+    .extension-layout {
+      display:grid;
+      grid-template-columns:minmax(280px, 360px) 1fr;
+      gap:var(--s-4);
+      align-items:start;
+    }
+    .extension-form {
+      display:flex; flex-direction:column; gap:var(--s-3);
+    }
+    .extension-form label {
+      display:flex; flex-direction:column; gap:6px;
+      color:var(--muted); font-size:var(--fs-sm);
+    }
+    .extension-form textarea {
+      min-height:130px;
+      resize:vertical;
+    }
+    .tool-debug-field select {
+      appearance:none;
+      min-height:38px;
+      padding-right:34px;
+      background-color:var(--panel-2);
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position:
+        calc(100% - 16px) 50%,
+        calc(100% - 11px) 50%;
+      background-size:5px 5px, 5px 5px;
+      background-repeat:no-repeat;
+      cursor:pointer;
+    }
+    .tool-debug-field select:hover {
+      border-color:color-mix(in oklch, var(--accent) 45%, var(--line));
+    }
+    .choice-label {
+      color:var(--muted);
+      font-size:var(--fs-sm);
+    }
+    .choice-grid {
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+      gap:8px;
+    }
+    .choice-option {
+      display:grid;
+      gap:4px;
+      text-align:left;
+      padding:10px 11px;
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:var(--panel-2);
+      color:var(--muted);
+      cursor:pointer;
+      transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast), transform var(--t-fast);
+    }
+    .choice-option:hover {
+      color:var(--text);
+      border-color:color-mix(in oklch, var(--accent) 38%, var(--line));
+      background:var(--panel-3);
+      transform:translateY(-1px);
+    }
+    .choice-option.active {
+      color:var(--text);
+      border-color:color-mix(in oklch, var(--accent) 62%, var(--line));
+      background:color-mix(in oklch, var(--accent-soft) 58%, var(--panel-2));
+      box-shadow:0 0 0 1px color-mix(in oklch, var(--accent) 28%, transparent);
+    }
+    .choice-title {
+      font-size:var(--fs-md);
+      font-weight:650;
+      line-height:1.25;
+    }
+    .choice-desc {
+      color:var(--muted);
+      font-size:var(--fs-xs);
+      line-height:1.35;
+    }
+    @media (max-width: 720px) {
+      .choice-grid { grid-template-columns:1fr; }
+    }
+    .campus-shell {
+      display:grid;
+      gap:var(--s-4);
+    }
+    .campus-hero {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-end;
+      gap:var(--s-4);
+      padding:var(--s-4);
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-md);
+      background:linear-gradient(135deg, color-mix(in oklch, var(--panel) 88%, var(--accent-soft)), var(--panel));
+    }
+    .campus-tabs {
+      display:flex;
+      gap:6px;
+      padding:4px;
+      width:max-content;
+      max-width:100%;
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:var(--panel-2);
+    }
+    .campus-tab {
+      border:0;
+      background:transparent;
+      color:var(--muted);
+      border-radius:calc(var(--r-sm) - 2px);
+      padding:7px 13px;
+      font-size:var(--fs-md);
+      font-weight:600;
+      cursor:pointer;
+      transition:background var(--t-fast), color var(--t-fast);
+    }
+    .campus-tab:hover { color:var(--text); background:color-mix(in oklch, var(--panel-3) 70%, transparent); }
+    .campus-tab.active {
+      color:var(--text);
+      background:color-mix(in oklch, var(--accent-soft) 70%, var(--panel-3));
+      box-shadow:0 0 0 1px color-mix(in oklch, var(--accent) 38%, transparent);
+    }
+    .campus-pane { display:none; }
+    .campus-pane.active { display:grid; gap:var(--s-4); }
+    .extension-main-panel {
+      min-height:420px;
+    }
+    .extension-main-panel .panel-head {
+      align-items:flex-start;
+      gap:var(--s-3);
+    }
+    .extension-main-panel .panel-head > div:first-child {
+      display:grid;
+      gap:4px;
+    }
+    .extension-count {
+      font-size:var(--fs-xs);
+      color:var(--muted);
+    }
+    .extension-list {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+      gap:var(--s-3);
+      align-items:start;
+    }
     .skill-card {
       padding:var(--s-4);
       background:var(--panel);
@@ -1555,8 +1710,145 @@
     .skill-name { font-weight:600; font-size:var(--fs-base); }
     .skill-type { font-size:var(--fs-xs); color:var(--muted); }
     .skill-desc { color:var(--muted); font-size:var(--fs-md); min-height:36px; line-height:1.5; }
+    .skill-meta { font-size:var(--fs-xs); color:var(--muted); word-break:break-all; }
+    .skill-collection-foot {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:var(--s-2);
+      margin-top:var(--s-2);
+      color:var(--muted);
+      font-size:var(--fs-xs);
+    }
+    .skill-child-list {
+      display:grid;
+      gap:var(--s-2);
+    }
+    .skill-child {
+      display:grid;
+      gap:var(--s-2);
+      padding:var(--s-3);
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:color-mix(in oklch, var(--panel-2) 58%, transparent);
+    }
+    .skill-child-head { display:flex; align-items:center; justify-content:space-between; gap:var(--s-2); }
+    .skill-child .skill-desc { min-height:0; }
+    .tool-list {
+      display:grid;
+      gap:6px;
+      margin-top:var(--s-2);
+    }
+    .tool-item {
+      padding:8px;
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:color-mix(in oklch, var(--panel-2) 58%, transparent);
+    }
+    .tool-name { font-weight:600; font-size:var(--fs-sm); }
+    .tool-desc { color:var(--muted); font-size:var(--fs-xs); line-height:1.5; }
+    .tool-debug {
+      display:none;
+      gap:var(--s-2);
+      margin-top:var(--s-2);
+      padding:var(--s-3);
+      border:1px solid color-mix(in oklch, var(--line) 60%, transparent);
+      border-radius:var(--r-sm);
+      background:color-mix(in oklch, var(--panel) 72%, transparent);
+    }
+    .tool-debug.active { display:grid; }
+    .tool-debug-title { font-size:var(--fs-sm); font-weight:600; color:var(--text); }
+    .tool-debug-field { display:grid; gap:5px; }
+    .tool-debug-label { display:flex; justify-content:space-between; gap:var(--s-2); font-size:var(--fs-xs); color:var(--text-soft); }
+    .tool-debug-required { color:var(--warn); }
+    .tool-debug-help { font-size:var(--fs-xs); color:var(--muted); line-height:1.45; }
+    .tool-debug-result {
+      white-space:pre-wrap;
+      word-break:break-word;
+      font-family:var(--mono);
+      font-size:var(--fs-xs);
+      color:var(--text);
+      background:color-mix(in oklch, var(--panel-2) 72%, transparent);
+      border-radius:var(--r-sm);
+      padding:var(--s-2);
+      max-height:220px;
+      overflow:auto;
+    }
     .skill-actions { display:flex; gap:6px; margin-top:var(--s-2); }
     .skill-actions .btn { padding:5px var(--s-3); font-size:var(--fs-md); }
+    .install-progress {
+      display:none;
+      gap:8px;
+      padding:var(--s-3);
+      border:1px solid var(--line-soft);
+      border-radius:var(--r-sm);
+      background:color-mix(in oklch, var(--panel-2) 70%, transparent);
+    }
+    .install-progress.active { display:grid; }
+    .install-progress-bar {
+      height:8px;
+      border-radius:999px;
+      background:color-mix(in oklch, var(--line) 55%, transparent);
+      overflow:hidden;
+    }
+    .install-progress-fill {
+      width:0%;
+      height:100%;
+      border-radius:inherit;
+      background:linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition:width var(--t-med);
+    }
+    .install-progress-text { font-size:var(--fs-xs); color:var(--muted); }
+    .extension-dialog {
+      position:relative;
+      width:min(560px, calc(100vw - 32px));
+      max-height:min(760px, calc(100vh - 48px));
+      padding:0;
+      border:0;
+      border-radius:var(--r-lg);
+      background:var(--panel);
+      color:var(--text);
+      box-shadow:var(--shadow-modal);
+      overflow:hidden;
+    }
+    .extension-dialog::backdrop {
+      background:rgba(0,0,0,0.58);
+      backdrop-filter:blur(2px);
+    }
+    .extension-dialog-head {
+      display:flex;
+      justify-content:space-between;
+      gap:var(--s-3);
+      align-items:flex-start;
+      padding:var(--s-4);
+      border-bottom:1px solid var(--line-soft);
+      background:color-mix(in oklch, var(--panel-2) 58%, transparent);
+    }
+    .extension-dialog-title {
+      margin:0;
+      font-size:var(--fs-lg);
+      font-weight:700;
+      letter-spacing:-0.01em;
+    }
+    .extension-dialog-sub {
+      margin-top:4px;
+      color:var(--muted);
+      font-size:var(--fs-sm);
+      line-height:1.5;
+    }
+    .extension-dialog-body {
+      padding:var(--s-4);
+      overflow:auto;
+      max-height:calc(min(760px, 100vh - 48px) - 82px);
+    }
+    .extension-modal-pane { display:none; }
+    .extension-modal-pane.active { display:block; }
+    @media (max-width: 980px) {
+      .extension-layout { grid-template-columns:1fr; }
+      .campus-hero { align-items:flex-start; flex-direction:column; }
+      .campus-tabs { width:100%; }
+      .campus-tab { flex:1; }
+    }
     .toolbar {
       display:flex; gap:var(--s-2); margin-bottom:var(--s-4);
       flex-wrap:wrap; align-items:center;
@@ -1702,15 +1994,18 @@
     #confirmBox .actions { display:flex; justify-content:flex-end; gap:var(--s-2); }
 
     /* ========== 会话查看悬浮窗 ========== */
-    #sessionViewerMask {
+    #sessionViewerMask,
+    #skillChildrenMask {
       position:fixed; inset:0; z-index:calc(var(--z-modal) - 100);
       background:rgba(0,0,0,0.6);
       display:none; align-items:center; justify-content:center;
       animation:cfFade var(--t-base) var(--ease-out);
       padding:var(--s-5);
     }
-    #sessionViewerMask.show { display:flex; }
-    #sessionViewerBox {
+    #sessionViewerMask.show,
+    #skillChildrenMask.show { display:flex; }
+    #sessionViewerBox,
+    #skillChildrenBox {
       width:min(900px, 96vw); height:min(80vh, 760px);
       background:var(--panel);
       border:1px solid var(--line);
@@ -1720,6 +2015,7 @@
       animation:cfPop var(--t-base) var(--ease-out);
       overflow:hidden;
     }
+    #skillChildrenBox { width:min(760px, 94vw); height:min(74vh, 680px); }
     .viewer-head {
       display:flex; justify-content:space-between; align-items:flex-start;
       padding:18px 22px 14px;
@@ -2449,8 +2745,8 @@
         <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>
         宠物日记
       </div>
-      <div class="navitem" data-page="skills" data-title="宠物校园">
-        <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 3 8l9 4 9-4-9-4z"/><path d="M3 8v5c0 1.7 4 3 9 3s9-1.3 9-3V8"/><path d="M12 12v7"/></svg></span>
+      <div class="navitem" data-page="campus" data-title="宠物校园">
+        <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 3 8l9 4 9-4-9-4z"/><path d="M5 10v5c0 2 3.1 4 7 4s7-2 7-4v-5"/><path d="M12 12v7"/><path d="M18 9v4"/></svg></span>
         宠物校园
       </div>
       <div class="navitem" data-page="memory" data-title="记忆管理">
@@ -2947,27 +3243,143 @@
       </div>
     </section>
 
-    <!-- ====== 6. 技能学习 ====== -->
-    <section id="page-skills" class="page">
+    <!-- ====== 6. 宠物校园 ====== -->
+    <section id="page-campus" class="page">
       <h2 class="page-title">宠物校园</h2>
-      <div class="page-sub">桌宠的小学校。挂载新本领、装上 MCP 工具，每一项技能都是它能为你做的事。</div>
+      <div class="page-sub">这里放桌宠学会的 Skill 和已连接的 MCP。平时先看现有能力，需要新增时再打开添加窗口。</div>
 
-      <div class="toolbar">
-        <input id="skillSearch" placeholder="搜索可用技能...">
-        <select id="skillFilter">
-          <option value="all">全部</option>
-          <option value="installed">已安装</option>
-          <option value="available">未安装</option>
-          <option value="mcp">MCP 协议</option>
-          <option value="builtin">内置</option>
-        </select>
-        <button class="btn primary" id="addMcpBtn">+ 添加 MCP 服务器</button>
+      <div class="campus-shell">
+        <div class="campus-hero">
+          <div>
+            <div class="campus-tabs" role="tablist" aria-label="扩展类型">
+              <button class="campus-tab active" type="button" data-campus-tab="skill" role="tab" aria-selected="true">Skill</button>
+              <button class="campus-tab" type="button" data-campus-tab="mcp" role="tab" aria-selected="false">MCP</button>
+            </div>
+          </div>
+          <button class="btn primary" id="openExtensionAddBtn" type="button">添加能力</button>
+        </div>
+
+        <div class="campus-pane active" id="campusSkillPane" data-campus-pane="skill">
+          <div class="panel extension-main-panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">已安装 Skill</div>
+                <div class="extension-count" id="skillCountText">正在读取本地 Skill...</div>
+              </div>
+              <div class="skill-actions">
+                <button class="btn" id="refreshSkillBtn" type="button">刷新</button>
+                <button class="btn primary" type="button" data-open-extension-modal="skill">安装 Skill</button>
+              </div>
+            </div>
+            <div class="extension-list" id="skillGrid"></div>
+          </div>
+        </div>
+
+        <div class="campus-pane" id="campusMcpPane" data-campus-pane="mcp">
+          <div class="panel extension-main-panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">已配置 MCP</div>
+                <div class="extension-count" id="mcpCountText">正在读取 MCP server...</div>
+              </div>
+              <div class="skill-actions">
+                <button class="btn" id="refreshMcpBtn" type="button">刷新</button>
+                <button class="btn primary" type="button" data-open-extension-modal="mcp">添加 MCP</button>
+              </div>
+            </div>
+            <div class="extension-list" id="mcpGrid"></div>
+          </div>
+        </div>
       </div>
-
-      <div class="grid grid-3" id="skillGrid"></div>
     </section>
 
-    <!-- ====== 7. 账户情况 ====== -->
+    <dialog class="extension-dialog" id="extensionDialog" aria-labelledby="extensionDialogTitle">
+      <div class="extension-dialog-head">
+        <div>
+          <h3 class="extension-dialog-title" id="extensionDialogTitle">添加能力</h3>
+          <div class="extension-dialog-sub" id="extensionDialogSub">选择来源后，我们会解析能力并写入本地配置。</div>
+        </div>
+        <button class="close-x" id="closeExtensionDialog" type="button" aria-label="关闭添加窗口">×</button>
+      </div>
+      <div class="extension-dialog-body">
+        <div class="extension-modal-pane active" data-extension-modal-pane="skill">
+          <form id="skillForm" class="extension-form" autocomplete="off">
+            <div class="choice-label">来源</div>
+            <input type="hidden" name="source_type" value="local_dir_upload">
+            <div class="choice-grid" data-choice-group="source_type">
+              <button class="choice-option active" type="button" data-choice-value="local_dir_upload">
+                <span class="choice-title">本地文件夹</span>
+                <span class="choice-desc">选择目录，适合开发中的 Skill</span>
+              </button>
+              <button class="choice-option" type="button" data-choice-value="zip_upload">
+                <span class="choice-title">本地 ZIP</span>
+                <span class="choice-desc">上传压缩包，适合分享安装</span>
+              </button>
+              <button class="choice-option" type="button" data-choice-value="github_repo">
+                <span class="choice-title">GitHub 仓库</span>
+                <span class="choice-desc">填写仓库地址，自动拉取解析</span>
+              </button>
+            </div>
+            <label id="skillGithubLabel" style="display:none;">GitHub 仓库地址
+              <input name="source_uri" placeholder="owner/repo 或 https://github.com/owner/repo">
+            </label>
+            <label>显示名称（可选）
+              <input name="display_name" placeholder="例如：办公文件处理包">
+            </label>
+            <label>备注（可选）
+              <input name="display_description" placeholder="给自己看的用途说明，不影响 Skill 调用名">
+            </label>
+            <button class="btn" id="skillPickDirBtn" type="button">选择文件夹</button>
+            <button class="btn" id="skillPickZipBtn" type="button" style="display:none;">选择 ZIP</button>
+            <div class="small" id="skillPickedHint">还没有选择文件夹</div>
+            <div class="install-progress" id="skillInstallProgress" aria-live="polite">
+              <div class="install-progress-bar"><div class="install-progress-fill" id="skillInstallProgressFill"></div></div>
+              <div class="install-progress-text" id="skillInstallProgressText">准备安装...</div>
+            </div>
+            <input id="skillDirInput" type="file" webkitdirectory multiple hidden>
+            <input id="skillZipInput" type="file" accept=".zip,application/zip" hidden>
+            <button class="btn primary" type="submit">安装 Skill</button>
+          </form>
+        </div>
+
+        <div class="extension-modal-pane" data-extension-modal-pane="mcp">
+          <form id="mcpForm" class="extension-form" autocomplete="off">
+            <label>显示名称（可选）
+              <input name="name" placeholder="例如：飞书项目 MCP">
+            </label>
+            <label>备注（可选）
+              <input name="description" placeholder="给自己看的用途说明，会展示在 MCP 卡片上">
+            </label>
+            <div class="choice-label">传输方式</div>
+            <input type="hidden" name="transport" value="stdio">
+            <div class="choice-grid" data-choice-group="transport">
+              <button class="choice-option active" type="button" data-choice-value="stdio">
+                <span class="choice-title">stdio</span>
+                <span class="choice-desc">本地命令启动，适合开发调试</span>
+              </button>
+              <button class="choice-option" type="button" data-choice-value="http">
+                <span class="choice-title">HTTP</span>
+                <span class="choice-desc">Streamable HTTP endpoint</span>
+              </button>
+              <button class="choice-option" type="button" data-choice-value="sse">
+                <span class="choice-title">SSE</span>
+                <span class="choice-desc">远程 SSE server 地址</span>
+              </button>
+            </div>
+            <label>连接地址
+              <input name="address" placeholder="stdio: npx -y xxx /path；HTTP/SSE: http://localhost:3001/mcp">
+            </label>
+            <div class="install-progress" id="mcpInstallProgress" aria-live="polite">
+              <div class="install-progress-bar"><div class="install-progress-fill" id="mcpInstallProgressFill"></div></div>
+              <div class="install-progress-text" id="mcpInstallProgressText">准备连接...</div>
+            </div>
+            <button class="btn primary" type="submit">添加 MCP</button>
+          </form>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ====== 8. 账户情况 ====== -->
     <section id="page-account" class="page">
       <h2 class="page-title">账户情况</h2>
       <div class="page-sub">配置 LLM 账号、查看用量趋势。改完立即生效，无需重启。</div>
@@ -3133,6 +3545,21 @@
   </div>
 </div>
 
+<!-- ==================== Skill 子项悬浮窗 ==================== -->
+<div id="skillChildrenMask">
+  <div id="skillChildrenBox">
+    <div class="viewer-head">
+      <div>
+        <h3 id="skillChildrenTitle">子 Skill</h3>
+        <div class="small" id="skillChildrenMeta"></div>
+      </div>
+      <button class="close-x" id="skillChildrenClose" type="button">✕</button>
+    </div>
+    <div id="skillChildrenBody" class="viewer-body"></div>
+    <div id="skillChildrenActions" class="viewer-actions"></div>
+  </div>
+</div>
+
 <!-- ==================== Confirm 弹窗 ==================== -->
 <div id="confirmMask">
   <div id="confirmBox">
@@ -3217,8 +3644,18 @@ async function api(method, url, body) {
     opts.body = JSON.stringify(body);
   }
   const r = await fetch(url, opts);
-  if (!r.ok) throw new Error(`${method} ${url} -> ${r.status}`);
   const ct = r.headers.get('content-type') || '';
+  if (!r.ok) {
+    if (ct.includes('application/json')) {
+      let detail = '';
+      try {
+        const err = await r.json();
+        detail = err.detail || err.message || '';
+      } catch {}
+      if (detail) throw new Error(detail);
+    }
+    throw new Error(`${method} ${url} -> ${r.status}`);
+  }
   return ct.includes('application/json') ? r.json() : r.text();
 }
 
@@ -3483,6 +3920,11 @@ $('enterBtn').addEventListener('click', () => sessionStorage.setItem('welcomed',
    导航
    ===================================================================== */
 function showPage(id) {
+  if (id === 'skills' || id === 'mcp') {
+    window.__pendingCampusTab = id === 'mcp' ? 'mcp' : 'skill';
+    if (window.__campusTabReady) setCampusTab(window.__pendingCampusTab);
+    id = 'campus';
+  }
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.navitem').forEach(n => n.classList.remove('active'));
   const page = $(`page-${id}`);
@@ -4459,6 +4901,7 @@ let lastDeviceTtsKey = '';
  * Set 里不会有命中。
  */
 const _webRepliesShownOnce = new Set();
+let _chatSending = false;
 function appendMsg(role, text) {
   const isUser = role === 'user';
   const el = document.createElement('div');
@@ -4467,6 +4910,31 @@ function appendMsg(role, text) {
   _renderWhoAvatar(el.querySelector('.who'), isUser);
   $('chatLog').appendChild(el);
   $('chatLog').scrollTop = $('chatLog').scrollHeight;
+}
+function appendThinkingMsg() {
+  const el = document.createElement('div');
+  el.className = 'msg msg-assistant assistant msg-thinking';
+  el.innerHTML = '<div class="who" aria-hidden="true"></div><div class="bubble"><span class="chat-main">思考中...</span><span class="chat-progress">正在整理上下文</span></div>';
+  _renderWhoAvatar(el.querySelector('.who'), false);
+  $('chatLog').appendChild(el);
+  $('chatLog').scrollTop = $('chatLog').scrollHeight;
+  const steps = ['正在整理上下文', '正在检查可用 Skill / MCP 工具', '如果需要会调用工具', '正在等待模型最终回复'];
+  let idx = 0;
+  const progress = el.querySelector('.chat-progress');
+  const timer = setInterval(() => {
+    idx = Math.min(idx + 1, steps.length - 1);
+    if (progress) progress.textContent = steps[idx];
+  }, 1400);
+  return {
+    el,
+    finish(text) {
+      clearInterval(timer);
+      el.classList.remove('msg-thinking');
+      const bubble = el.querySelector('.bubble');
+      if (bubble) bubble.textContent = text;
+      $('chatLog').scrollTop = $('chatLog').scrollHeight;
+    },
+  };
 }
 function syncDeviceChat(d) {
   if (!d || location.hash.slice(1) !== 'chat') return;
@@ -4492,17 +4960,27 @@ function syncDeviceChat(d) {
   }
 }
 async function sendChat() {
+  if (_chatSending) {
+    toast('上一条消息还在思考中，先等我回完这句。');
+    return;
+  }
   const text = $('chatInput').value.trim();
   if (!text) return;
   $('chatInput').value = '';
+  _chatSending = true;
+  const sendBtn = $('chatSendBtn');
+  const input = $('chatInput');
+  if (sendBtn) sendBtn.disabled = true;
+  if (input) input.disabled = true;
   appendMsg('user', text);
+  const thinking = appendThinkingMsg();
   try {
     const data = await api('POST', '/chat', {
       text,
       device_id: currentChatDeviceId(),
     });
     const reply = data.reply || '...';
-    appendMsg('assistant', reply);
+    thinking.finish(reply);
     if ($('chatTtsToggle').checked) {
       // 标记"这条 reply web 已经显示过"，等会 syncDeviceChat 看到 last_tts_text
       // 与之相同时会跳过一次 appendMsg，避免重复气泡。
@@ -4519,15 +4997,20 @@ async function sendChat() {
   } catch (err) {
     const msg = err.message || '';
     if (/500/.test(msg) || /API Key/i.test(msg)) {
-      appendMsg('assistant', '⚠️ 还没配置 LLM 账号，没法回话呢～点这里去「账户情况」配置 →');
-      const last = $('chatLog').lastElementChild;
+      thinking.finish('⚠️ 还没配置 LLM 账号，没法回话呢～点这里去「账户情况」配置 →');
+      const last = thinking.el;
       if (last) {
         last.style.cursor = 'pointer';
         last.addEventListener('click', () => { location.hash = '#account'; });
       }
     } else {
-      appendMsg('assistant', '⚠️ 网关返回错误：' + msg);
+      thinking.finish('⚠️ 网关返回错误：' + msg);
     }
+  } finally {
+    _chatSending = false;
+    if (input) input.disabled = false;
+    if (sendBtn) sendBtn.disabled = input ? input.value.trim().length === 0 : false;
+    if (input) input.focus();
   }
 }
 $('chatSendBtn').addEventListener('click', sendChat);
@@ -4588,96 +5071,654 @@ async function loadGreeting() {
 }
 
 /* =====================================================================
-   6) 技能学习
+   6) Agent 扩展：Skill / MCP
    --------------------------------------------------------------------
-   API: GET    /api/skills                       ->  { skills:[{id,name,type,desc,installed,enabled,...}] }
-   API: POST   /api/skills        { ... }        ->  { ok, skill }    type: builtin/mcp，安装/添加
-   API: DELETE /api/skills/{id}                  ->  { ok }
-   API: POST   /api/skills/{id}/toggle           ->  { ok, enabled }
+   API: GET    /api/skills          -> { skills:[...] }
+   API: POST   /api/skills          -> { ok, skill }
+   API: DELETE /api/skills/{id}     -> { ok }
+   API: POST   /api/skills/{id}/toggle
+   API: GET    /api/mcp             -> { servers:[...] }
    ===================================================================== */
-const MOCK_SKILLS = [
-  { id:'weather', name:'天气查询', type:'builtin', desc:'通过 wttr.in 实时查询天气', installed:true, enabled:true },
-  { id:'memory',  name:'长期记忆', type:'builtin', desc:'记住用户偏好和最近对话', installed:true, enabled:true },
-  { id:'music-jay', name:'周杰伦点歌', type:'builtin', desc:'本地周杰伦曲库随机播放', installed:true, enabled:true },
-  { id:'mcp-fs', name:'MCP: 文件系统', type:'mcp', desc:'让 TablePet 读写本地文件（需配置 MCP server）', installed:false, enabled:false },
-  { id:'mcp-github', name:'MCP: GitHub', type:'mcp', desc:'查 issue / 提 PR / 看仓库动态', installed:false, enabled:false },
-  { id:'mcp-calendar', name:'MCP: 日历', type:'mcp', desc:'安排日程、提醒事项', installed:false, enabled:false },
-  { id:'face-recognize', name:'人脸记忆', type:'builtin', desc:'记住每张脸对应的称呼', installed:false, enabled:false },
-  { id:'wake-word', name:'自定义唤醒词', type:'builtin', desc:'训练个性化唤醒词模型', installed:false, enabled:false },
-];
 let _skills = [];
+let _mcpServers = [];
+let _campusTab = 'skill';
+let _activeSkillChildrenKey = '';
+function setCampusTab(kind) {
+  _campusTab = kind === 'mcp' ? 'mcp' : 'skill';
+  document.querySelectorAll('[data-campus-tab]').forEach(btn => {
+    const active = btn.dataset.campusTab === _campusTab;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('[data-campus-pane]').forEach(pane => {
+    pane.classList.toggle('active', pane.dataset.campusPane === _campusTab);
+  });
+  const addBtn = $('openExtensionAddBtn');
+  if (addBtn) addBtn.textContent = _campusTab === 'mcp' ? '添加 MCP' : '安装 Skill';
+}
+function setExtensionModalPane(kind) {
+  const activeKind = kind === 'mcp' ? 'mcp' : 'skill';
+  document.querySelectorAll('[data-extension-modal-pane]').forEach(pane => {
+    pane.classList.toggle('active', pane.dataset.extensionModalPane === activeKind);
+  });
+  const title = $('extensionDialogTitle');
+  const sub = $('extensionDialogSub');
+  if (title) title.textContent = activeKind === 'mcp' ? '添加 MCP Server' : '安装 Skill';
+  if (sub) {
+    sub.textContent = activeKind === 'mcp'
+      ? '连接 stdio、Streamable HTTP 或 SSE server，我们会先发现工具列表。'
+      : '从本地文件夹、ZIP 或 GitHub 仓库安装，我们会解析每个 SKILL.md。';
+  }
+}
+function openExtensionDialog(kind) {
+  const dialog = $('extensionDialog');
+  if (!dialog) return;
+  const activeKind = kind === 'mcp' ? 'mcp' : 'skill';
+  setCampusTab(activeKind);
+  setExtensionModalPane(activeKind);
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+}
+function closeExtensionDialog() {
+  const dialog = $('extensionDialog');
+  if (!dialog) return;
+  if (typeof dialog.close === 'function') dialog.close();
+  else dialog.removeAttribute('open');
+}
+document.querySelectorAll('[data-campus-tab]').forEach(btn => {
+  btn.addEventListener('click', () => setCampusTab(btn.dataset.campusTab));
+});
+document.querySelectorAll('[data-open-extension-modal]').forEach(btn => {
+  btn.addEventListener('click', () => openExtensionDialog(btn.dataset.openExtensionModal));
+});
+$('openExtensionAddBtn')?.addEventListener('click', () => openExtensionDialog(_campusTab));
+$('closeExtensionDialog')?.addEventListener('click', closeExtensionDialog);
+$('extensionDialog')?.addEventListener('click', (ev) => {
+  if (ev.target === ev.currentTarget) closeExtensionDialog();
+});
+window.__campusTabReady = true;
+if (window.__pendingCampusTab) setCampusTab(window.__pendingCampusTab);
 async function refreshSkills() {
+  const grid = $('skillGrid');
+  if (!grid) return;
   try {
     const r = await api('GET', '/api/skills');
     _skills = r.skills || [];
-  } catch {
-    _skills = MOCK_SKILLS.map(s => ({...s}));
-  }
+  } catch { _skills = []; }
   renderSkills();
 }
-function renderSkills() {
-  const q = $('skillSearch').value.trim().toLowerCase();
-  const f = $('skillFilter').value;
-  const list = _skills.filter(s => {
-    if (q && !(s.name + s.desc).toLowerCase().includes(q)) return false;
-    if (f === 'installed' && !s.installed) return false;
-    if (f === 'available' && s.installed) return false;
-    if (f === 'mcp' && s.type !== 'mcp') return false;
-    if (f === 'builtin' && s.type !== 'builtin') return false;
-    return true;
-  });
-  $('skillGrid').innerHTML = list.length ? list.map(s => `
-    <div class="skill-card ${s.installed?'installed':''}">
+async function refreshMcp() {
+  const grid = $('mcpGrid');
+  if (!grid) return;
+  try {
+    const r = await api('GET', '/api/mcp');
+    _mcpServers = r.servers || [];
+  } catch { _mcpServers = []; }
+  renderMcp();
+}
+function extensionCard(item, kind) {
+  const cfg = item.config || {};
+  const localPath = item.config && item.config.local_path ? item.config.local_path : '';
+  const source = [item.source_type, item.source_uri].filter(Boolean).join(' · ');
+  const parsedPath = item.skill_path || item.local_path || localPath;
+  const displayName = kind === 'skill' ? (cfg.collection_name || cfg.display_name || item.name) : item.name;
+  const displayDesc = kind === 'skill' ? (cfg.collection_description || cfg.display_description || item.description) : item.description;
+  const desc = item.parse_error || displayDesc || (kind === 'skill' ? parsedPath : source) || (kind === 'mcp' ? 'MCP server 配置' : '本地 Skill 目录');
+  const meta = kind === 'skill'
+    ? [item.run_as ? `runAs: ${item.run_as}` : '', item.script ? `script: ${item.script_runtime || 'auto'} ${item.script}` : '', item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '', parsedPath || ''].filter(Boolean).join(' · ')
+    : source;
+  return `
+    <div class="skill-card installed">
       <div class="skill-head">
         <div>
-          <div class="skill-name">${escapeHtml(s.name)}</div>
-          <div class="skill-type">${s.type==='mcp'?'🔌 MCP':'⚙️ 内置'} · ${escapeHtml(s.id)}</div>
+          <div class="skill-name">${escapeHtml(displayName || '未命名扩展')}</div>
+          <div class="skill-type">${kind === 'mcp' ? 'MCP' : 'Skill'} · #${escapeHtml(item.id)}</div>
         </div>
-        ${s.installed ? `<span class="badge ${s.enabled?'ok':'muted'}">${s.enabled?'启用':'停用'}</span>` : '<span class="badge warn">未安装</span>'}
+        <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
       </div>
-      <div class="skill-desc">${escapeHtml(s.desc)}</div>
+      <div class="skill-desc">${escapeHtml(desc)}</div>
+      ${meta ? `<div class="skill-meta">${escapeHtml(meta)}</div>` : ''}
       <div class="skill-actions">
-        ${s.installed
-          ? `<button class="btn" data-toggle="${s.id}">${s.enabled?'停用':'启用'}</button>
-             <button class="btn danger" data-uninstall="${s.id}">卸载</button>`
-          : `<button class="btn primary" data-install="${s.id}">安装</button>`}
+        <button class="btn" data-toggle-${kind}="${item.id}">${item.enabled?'停用':'启用'}</button>
+        <button class="btn danger" data-delete-${kind}="${item.id}">卸载</button>
       </div>
-    </div>`).join('') : '<div class="empty">没有符合条件的技能</div>';
-
-  $('skillGrid').querySelectorAll('[data-install]').forEach(b => b.addEventListener('click', async () => {
-    const id = b.dataset.install;
-    try { await api('POST', '/api/skills', { id }); } catch {}
-    const sk = _skills.find(x => x.id === id);
-    if (sk) { sk.installed = true; sk.enabled = true; }
-    toast(`已安装 ${id}`); renderSkills();
+    </div>`;
+}
+function skillGroupKey(item) {
+  return isSkillCollectionChild(item) ? `collection-${(item.config || {}).collection_path}` : `skill-${item.id}`;
+}
+function isSkillCollectionChild(item) {
+  const cfg = item.config || {};
+  const collectionPath = cfg.collection_path || '';
+  const localPath = item.local_path || cfg.local_path || '';
+  const skillPath = item.skill_path || cfg.skill_path || '';
+  return !!(collectionPath && skillPath && localPath && localPath !== collectionPath);
+}
+function skillDisplayName(item) {
+  const cfg = item.config || {};
+  return cfg.collection_name || cfg.display_name || item.name || 'Skill';
+}
+function skillDisplayDescription(item, fallback='') {
+  const cfg = item.config || {};
+  return cfg.collection_description || cfg.display_description || item.description || fallback;
+}
+function buildSkillGroups() {
+  const groups = new Map();
+  for (const item of _skills) {
+    const key = skillGroupKey(item);
+    const isCollection = isSkillCollectionChild(item);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        title: isCollection ? skillDisplayName(item) : (item.name || 'Skill'),
+        isCollection,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(item);
+  }
+  return Array.from(groups.values());
+}
+function renderSkillGroup(group) {
+  if (group.items.length === 1) return extensionCard(group.items[0], 'skill');
+  const enabledCount = group.items.filter(x => x.enabled).length;
+  const first = group.items[0] || {};
+  const source = first.source_uri || group.key;
+  return `
+    <div class="skill-card installed">
+      <div class="skill-head">
+        <div>
+          <div class="skill-name">${escapeHtml(group.title)}</div>
+          <div class="skill-type">Skill 集合 · ${group.items.length} 个技能 · ${enabledCount} 个启用</div>
+        </div>
+        <span class="badge ok">集合</span>
+      </div>
+      <div class="skill-desc">${escapeHtml(skillDisplayDescription(first, source) || source)}</div>
+      <div class="skill-meta">${escapeHtml(source)}</div>
+      <div class="skill-actions">
+        <button class="btn primary" data-open-skill-children="${escapeHtml(group.key)}">查看子 Skill</button>
+      </div>
+      <div class="skill-collection-foot">
+        <span>子 Skill 的启停和卸载在浮窗里操作</span>
+        <span>${enabledCount}/${group.items.length} 启用</span>
+      </div>
+    </div>`;
+}
+function renderSkills() {
+  const grid = $('skillGrid');
+  if (!grid) return;
+  const count = $('skillCountText');
+  const enabledCount = _skills.filter(x => x.enabled).length;
+  if (count) count.textContent = `${_skills.length} 个 Skill，${enabledCount} 个启用`;
+  const list = buildSkillGroups();
+  grid.innerHTML = _skills.length
+    ? list.map(renderSkillGroup).join('')
+    : '<div class="empty">还没有安装 Skill。可以从本地文件夹、本地 ZIP 或 GitHub 仓库开始。</div>';
+  grid.querySelectorAll('[data-delete-skill]').forEach(b => b.addEventListener('click', async () => {
+    await api('DELETE', `/api/skills/${encodeURIComponent(b.dataset.deleteSkill)}`);
+    toast('已卸载 Skill');
+    refreshSkills();
   }));
-  $('skillGrid').querySelectorAll('[data-uninstall]').forEach(b => b.addEventListener('click', async () => {
-    const id = b.dataset.uninstall;
-    try { await api('DELETE', `/api/skills/${encodeURIComponent(id)}`); } catch {}
-    const sk = _skills.find(x => x.id === id);
-    if (sk) { sk.installed = false; sk.enabled = false; }
-    toast(`已卸载 ${id}`); renderSkills();
+  grid.querySelectorAll('[data-toggle-skill]').forEach(b => b.addEventListener('click', async () => {
+    await api('POST', `/api/skills/${encodeURIComponent(b.dataset.toggleSkill)}/toggle`);
+    refreshSkills();
   }));
-  $('skillGrid').querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', async () => {
-    const id = b.dataset.toggle;
-    try { await api('POST', `/api/skills/${encodeURIComponent(id)}/toggle`); } catch {}
-    const sk = _skills.find(x => x.id === id);
-    if (sk) sk.enabled = !sk.enabled;
-    toast(`已${sk?.enabled?'启用':'停用'}`); renderSkills();
+  grid.querySelectorAll('[data-open-skill-children]').forEach(b => b.addEventListener('click', () => {
+    const group = buildSkillGroups().find(g => g.key === b.dataset.openSkillChildren);
+    if (group) openSkillChildrenDialog(group);
   }));
 }
-$('skillSearch').addEventListener('input', renderSkills);
-$('skillFilter').addEventListener('change', renderSkills);
-$('addMcpBtn').addEventListener('click', async () => {
-  const url = prompt('输入 MCP server 地址：\n(例如: stdio://node ./mcp-server.js  或  http://localhost:3001)');
-  if (!url) return;
-  const name = prompt('给这个技能起个名字：') || url;
-  // API: POST /api/skills  { type:'mcp', name, url }
-  try { await api('POST', '/api/skills', { type:'mcp', name, url }); }
-  catch {}
-  _skills.push({ id:`mcp-${Date.now()}`, name, type:'mcp', desc:url, installed:true, enabled:true });
-  toast('已添加 MCP 服务器'); renderSkills();
+function skillChildCard(item) {
+  const meta = [
+    item.run_as ? `runAs: ${item.run_as}` : '',
+    item.script ? `script: ${item.script_runtime || 'auto'} ${item.script}` : '',
+    item.allowed_tools?.length ? `tools: ${item.allowed_tools.join(', ')}` : '',
+    item.skill_path || '',
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="skill-child">
+      <div class="skill-child-head">
+        <div>
+          <div class="skill-name">${escapeHtml(item.name || '未命名 Skill')}</div>
+          ${meta ? `<div class="skill-meta">${escapeHtml(meta)}</div>` : ''}
+        </div>
+        <span class="badge ${item.enabled?'ok':'muted'}">${item.enabled?'启用':'停用'}</span>
+      </div>
+      <div class="skill-desc">${escapeHtml(item.description || item.parse_error || '没有 description')}</div>
+      <div class="skill-actions">
+        <button class="btn" data-dialog-toggle-skill="${item.id}">${item.enabled?'停用':'启用'}</button>
+        <button class="btn danger" data-dialog-delete-skill="${item.id}">卸载</button>
+      </div>
+    </div>`;
+}
+function renderSkillChildrenDialog(group) {
+  const enabledCount = group.items.filter(x => x.enabled).length;
+  const first = group.items[0] || {};
+  $('skillChildrenTitle').textContent = group.title || 'Skill 集合';
+  $('skillChildrenMeta').textContent = `${group.items.length} 个子 Skill，${enabledCount} 个启用 · ${first.source_uri || group.key}`;
+  $('skillChildrenBody').innerHTML = `<div class="skill-child-list">${group.items.map(skillChildCard).join('')}</div>`;
+  $('skillChildrenActions').innerHTML = `
+    <div class="va-left">
+      <button class="btn" data-dialog-bulk-skill="true">全部启用</button>
+      <button class="btn" data-dialog-bulk-skill="false">全部停用</button>
+    </div>
+    <div class="va-right">
+      <button class="btn" id="skillChildrenDone" type="button">关闭</button>
+    </div>`;
+  $('skillChildrenDone').addEventListener('click', closeSkillChildrenDialog);
+  $('skillChildrenBody').querySelectorAll('[data-dialog-toggle-skill]').forEach(b => b.addEventListener('click', async () => {
+    await api('POST', `/api/skills/${encodeURIComponent(b.dataset.dialogToggleSkill)}/toggle`);
+    await refreshSkills();
+    refreshOpenSkillChildrenDialog();
+  }));
+  $('skillChildrenBody').querySelectorAll('[data-dialog-delete-skill]').forEach(b => b.addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: '卸载这个子 Skill？',
+      body: '只会卸载当前子 Skill，不会影响同集合里的其它 Skill。',
+      okText: '卸载',
+      danger: true,
+    });
+    if (!ok) return;
+    await api('DELETE', `/api/skills/${encodeURIComponent(b.dataset.dialogDeleteSkill)}`);
+    toast('已卸载 Skill');
+    await refreshSkills();
+    refreshOpenSkillChildrenDialog();
+  }));
+  $('skillChildrenActions').querySelectorAll('[data-dialog-bulk-skill]').forEach(b => b.addEventListener('click', async () => {
+    const enabled = b.dataset.dialogBulkSkill === 'true';
+    const ids = group.items.map(x => x.id).filter(Boolean);
+    try {
+      await Promise.all(ids.map(id => api('POST', `/api/skills/${encodeURIComponent(id)}/toggle`, { enabled })));
+      toast(enabled ? '已全部启用' : '已全部停用');
+      await refreshSkills();
+      refreshOpenSkillChildrenDialog();
+    } catch (e) {
+      toast('批量操作失败：' + e.message, 'error');
+    }
+  }));
+}
+function openSkillChildrenDialog(group) {
+  _activeSkillChildrenKey = group.key;
+  $('skillChildrenMask').classList.add('show');
+  renderSkillChildrenDialog(group);
+}
+function refreshOpenSkillChildrenDialog() {
+  if (!_activeSkillChildrenKey) return;
+  const group = buildSkillGroups().find(g => g.key === _activeSkillChildrenKey);
+  if (!group || group.items.length <= 1) {
+    closeSkillChildrenDialog();
+    return;
+  }
+  renderSkillChildrenDialog(group);
+}
+function closeSkillChildrenDialog() {
+  $('skillChildrenMask').classList.remove('show');
+  _activeSkillChildrenKey = '';
+}
+$('skillChildrenClose').addEventListener('click', closeSkillChildrenDialog);
+$('skillChildrenMask').addEventListener('click', (e) => {
+  if (e.target === $('skillChildrenMask')) closeSkillChildrenDialog();
 });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('skillChildrenMask').classList.contains('show')) {
+    closeSkillChildrenDialog();
+  }
+});
+function schemaType(schema) {
+  if (!schema || typeof schema !== 'object') return 'string';
+  if (schema.type) return Array.isArray(schema.type) ? schema.type[0] : schema.type;
+  if (schema.enum) return 'string';
+  if (schema.properties) return 'object';
+  return 'string';
+}
+function renderToolDebugField(name, schema={}, required=[]) {
+  const type = schemaType(schema);
+  const isRequired = required.includes(name);
+  const desc = schema.description || schema.title || '';
+  const common = `data-param="${escapeHtml(name)}" data-type="${escapeHtml(type)}"`;
+  let control = '';
+  if (schema.enum && Array.isArray(schema.enum)) {
+    control = `<select ${common}>${schema.enum.map(v => `<option value="${escapeHtml(String(v))}">${escapeHtml(String(v))}</option>`).join('')}</select>`;
+  } else if (type === 'boolean') {
+    control = `<label class="switch"><input type="checkbox" ${common}><span></span></label>`;
+  } else if (type === 'number' || type === 'integer') {
+    control = `<input type="number" ${common} placeholder="${escapeHtml(schema.default ?? '')}">`;
+  } else if (type === 'object' || type === 'array') {
+    control = `<textarea rows="4" ${common} placeholder='${type === 'array' ? '[]' : '{}'}'></textarea>`;
+  } else {
+    control = `<input ${common} placeholder="${escapeHtml(schema.default ?? '')}">`;
+  }
+  return `
+    <label class="tool-debug-field">
+      <span class="tool-debug-label">
+        <span>${escapeHtml(name)} · ${escapeHtml(type)}</span>
+        ${isRequired ? '<span class="tool-debug-required">必填</span>' : '<span>可选</span>'}
+      </span>
+      ${control}
+      ${desc ? `<span class="tool-debug-help">${escapeHtml(desc)}</span>` : ''}
+    </label>`;
+}
+function renderToolDebugConsole(server, tool, idx) {
+  const schema = tool.input_schema || tool.inputSchema || {};
+  const properties = schema.properties && typeof schema.properties === 'object' ? schema.properties : {};
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  const fields = Object.keys(properties).length
+    ? Object.entries(properties).map(([name, prop]) => renderToolDebugField(name, prop || {}, required)).join('')
+    : '<div class="skill-meta">这个工具没有声明参数，可以直接运行。</div>';
+  return `
+    <div class="tool-debug" id="mcpDebug-${server.id}-${idx}">
+      <div class="tool-debug-title">调试台：${escapeHtml(tool.name || 'tool')}</div>
+      ${tool.description ? `<div class="tool-desc">${escapeHtml(tool.description)}</div>` : ''}
+      ${fields}
+      <div class="skill-actions">
+        <button class="btn primary" data-run-mcp="${server.id}" data-tool-index="${idx}">运行工具</button>
+      </div>
+      <div class="tool-debug-result" id="mcpDebugResult-${server.id}-${idx}" hidden></div>
+    </div>`;
+}
+function readDebugArguments(panel) {
+  const args = {};
+  panel.querySelectorAll('[data-param]').forEach(input => {
+    const name = input.dataset.param;
+    const type = input.dataset.type || 'string';
+    if (!name) return;
+    if (type === 'boolean') {
+      args[name] = !!input.checked;
+      return;
+    }
+    const raw = (input.value || '').trim();
+    if (!raw) return;
+    if (type === 'number' || type === 'integer') {
+      const n = Number(raw);
+      if (!Number.isNaN(n)) args[name] = type === 'integer' ? Math.trunc(n) : n;
+      return;
+    }
+    if (type === 'object' || type === 'array') {
+      try { args[name] = JSON.parse(raw); }
+      catch { throw new Error(`${name} 需要填写合法 JSON`); }
+      return;
+    }
+    args[name] = raw;
+  });
+  return args;
+}
+function renderMcp() {
+  const grid = $('mcpGrid');
+  if (!grid) return;
+  const count = $('mcpCountText');
+  const enabledCount = _mcpServers.filter(x => x.enabled).length;
+  if (count) count.textContent = `${_mcpServers.length} 个 server，${enabledCount} 个启用`;
+  grid.innerHTML = _mcpServers.length
+    ? _mcpServers.map(s => {
+        const cfg = s.config || {};
+        const tools = Array.isArray(cfg.tools) ? cfg.tools : [];
+        const status = cfg.status || 'unknown';
+        const source = cfg.transport === 'stdio' ? cfg.command : cfg.url;
+        return `
+          <div class="skill-card installed">
+            <div class="skill-head">
+              <div>
+                <div class="skill-name">${escapeHtml(s.name || 'MCP Server')}</div>
+                <div class="skill-type">MCP · #${escapeHtml(s.id)} · ${escapeHtml(cfg.transport || 'unknown')} · ${escapeHtml(status)}</div>
+              </div>
+              <span class="badge ${s.enabled && status !== 'error' ? 'ok':'muted'}">${s.enabled?'启用':'停用'}</span>
+            </div>
+            <div class="skill-desc">${escapeHtml(s.description || source || cfg.last_error || 'MCP server 配置')}</div>
+            ${cfg.last_error ? `<div class="skill-meta">错误：${escapeHtml(cfg.last_error)}</div>` : ''}
+            <div class="tool-list">
+              ${tools.length ? tools.map((t, idx) => `
+                <div class="tool-item">
+                  <div class="tool-name">${escapeHtml(t.name || 'tool')}</div>
+                  <div class="tool-desc">${escapeHtml(t.description || '无说明')}</div>
+                  <div class="skill-actions">
+                    <button class="btn" data-open-mcp-debug="${s.id}" data-tool-index="${idx}">打开调试台</button>
+                  </div>
+                  ${renderToolDebugConsole(s, t, idx)}
+                </div>
+              `).join('') : '<div class="skill-meta">尚未发现工具。可点“刷新工具”重新连接。</div>'}
+            </div>
+            <div class="skill-actions">
+              <button class="btn" data-refresh-mcp-tools="${s.id}">刷新工具</button>
+              <button class="btn" data-toggle-mcp="${s.id}">${s.enabled?'停用':'启用'}</button>
+              <button class="btn danger" data-delete-mcp="${s.id}">删除</button>
+            </div>
+          </div>`;
+      }).join('')
+    : '<div class="empty">还没有配置 MCP server。支持 stdio、Streamable HTTP、SSE。</div>';
+  grid.querySelectorAll('[data-delete-mcp]').forEach(b => b.addEventListener('click', async () => {
+    await api('DELETE', `/api/mcp/${encodeURIComponent(b.dataset.deleteMcp)}`);
+    toast('已删除 MCP');
+    refreshMcp();
+  }));
+  grid.querySelectorAll('[data-toggle-mcp]').forEach(b => b.addEventListener('click', async () => {
+    await api('POST', `/api/mcp/${encodeURIComponent(b.dataset.toggleMcp)}/toggle`);
+    refreshMcp();
+  }));
+  grid.querySelectorAll('[data-refresh-mcp-tools]').forEach(b => b.addEventListener('click', async () => {
+    try {
+      toast('正在刷新 MCP 工具列表...');
+      const r = await api('POST', `/api/mcp/${encodeURIComponent(b.dataset.refreshMcpTools)}/refresh-tools`);
+      if (!r.ok) toast('刷新失败：' + (r.error || '未发现工具'), 'error');
+      else toast(`已发现 ${r.tools?.length || 0} 个工具`);
+      refreshMcp();
+    } catch (e) { toast('刷新失败：' + e.message, 'error'); }
+  }));
+  grid.querySelectorAll('[data-open-mcp-debug]').forEach(b => b.addEventListener('click', () => {
+    const panel = $(`mcpDebug-${b.dataset.openMcpDebug}-${b.dataset.toolIndex}`);
+    if (panel) panel.classList.toggle('active');
+  }));
+  grid.querySelectorAll('[data-run-mcp]').forEach(b => b.addEventListener('click', async () => {
+    const server = _mcpServers.find(x => String(x.id) === String(b.dataset.runMcp));
+    const tool = (server?.config?.tools || [])[Number(b.dataset.toolIndex || 0)];
+    const panel = $(`mcpDebug-${b.dataset.runMcp}-${b.dataset.toolIndex}`);
+    const resultEl = $(`mcpDebugResult-${b.dataset.runMcp}-${b.dataset.toolIndex}`);
+    if (!server || !tool || !panel) return;
+    let args = {};
+    try {
+      args = readDebugArguments(panel);
+      if (resultEl) {
+        resultEl.hidden = false;
+        resultEl.textContent = '运行中...';
+      }
+      const r = await api('POST', `/api/mcp/${encodeURIComponent(server.id)}/debug-tool`, {
+        tool_name: tool.name,
+        arguments: args,
+      });
+      if (resultEl) resultEl.textContent = JSON.stringify(r.result, null, 2);
+      toast('工具运行完成');
+    } catch (e) {
+      if (resultEl) {
+        resultEl.hidden = false;
+        resultEl.textContent = '调试失败：' + e.message;
+      }
+      toast('调试失败：' + e.message, 'error');
+    }
+  }));
+}
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+async function fileToUpload(file) {
+  return {
+    path: file.webkitRelativePath || file.name,
+    data: arrayBufferToBase64(await file.arrayBuffer()),
+  };
+}
+function syncChoiceGroup(form, name) {
+  if (!form) return;
+  const field = form.elements[name];
+  const group = form.querySelector(`[data-choice-group="${name}"]`);
+  if (!field || !group) return;
+  group.querySelectorAll('[data-choice-value]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.choiceValue === field.value);
+  });
+}
+function setupChoiceGroup(form, name, onChange) {
+  if (!form) return;
+  const field = form.elements[name];
+  const group = form.querySelector(`[data-choice-group="${name}"]`);
+  if (!field || !group) return;
+  group.querySelectorAll('[data-choice-value]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      field.value = btn.dataset.choiceValue || field.value;
+      syncChoiceGroup(form, name);
+      if (typeof onChange === 'function') onChange();
+    });
+  });
+  syncChoiceGroup(form, name);
+}
+function updateSkillSourceUI() {
+  const form = $('skillForm');
+  if (!form) return;
+  const source = form.elements.source_type.value;
+  const isDir = source === 'local_dir_upload';
+  const isZip = source === 'zip_upload';
+  $('skillGithubLabel').style.display = source === 'github_repo' ? '' : 'none';
+  $('skillPickDirBtn').style.display = isDir ? '' : 'none';
+  $('skillPickZipBtn').style.display = isZip ? '' : 'none';
+  const hint = $('skillPickedHint');
+  if (hint) {
+    if (source === 'github_repo') hint.textContent = '填写 GitHub 仓库地址即可';
+    else if (isZip) hint.textContent = $('skillZipInput').files[0]?.name || '还没有选择 ZIP';
+    else hint.textContent = $('skillDirInput').files.length ? `已选择 ${$('skillDirInput').files.length} 个文件` : '还没有选择文件夹';
+  }
+}
+function setSkillInstallProgress(percent, text) {
+  const box = $('skillInstallProgress');
+  const fill = $('skillInstallProgressFill');
+  const label = $('skillInstallProgressText');
+  if (!box || !fill || !label) return;
+  box.classList.add('active');
+  fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  label.textContent = text;
+}
+function hideSkillInstallProgress(delay = 900) {
+  setTimeout(() => {
+    const box = $('skillInstallProgress');
+    if (box) box.classList.remove('active');
+  }, delay);
+}
+function setMcpInstallProgress(percent, text) {
+  const box = $('mcpInstallProgress');
+  const fill = $('mcpInstallProgressFill');
+  const label = $('mcpInstallProgressText');
+  if (!box || !fill || !label) return;
+  box.classList.add('active');
+  fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  label.textContent = text;
+}
+function hideMcpInstallProgress(delay = 900) {
+  setTimeout(() => {
+    const box = $('mcpInstallProgress');
+    if (box) box.classList.remove('active');
+  }, delay);
+}
+const skillForm = $('skillForm');
+if (skillForm) {
+  setupChoiceGroup(skillForm, 'source_type', updateSkillSourceUI);
+  $('skillPickDirBtn')?.addEventListener('click', () => $('skillDirInput')?.click());
+  $('skillPickZipBtn')?.addEventListener('click', () => $('skillZipInput')?.click());
+  $('skillDirInput')?.addEventListener('change', updateSkillSourceUI);
+  $('skillZipInput')?.addEventListener('change', updateSkillSourceUI);
+  updateSkillSourceUI();
+}
+if (skillForm) skillForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const f = ev.currentTarget;
+  try {
+    const source = f.elements.source_type.value;
+    let result;
+    setSkillInstallProgress(8, '准备安装...');
+    if (source === 'github_repo') {
+      setSkillInstallProgress(28, '正在拉取 GitHub 仓库...');
+      result = await api('POST', '/api/skills', {
+        name: f.elements.display_name.value.trim(),
+        description: f.elements.display_description.value.trim(),
+        source_type: 'github_repo',
+        source_uri: f.elements.source_uri.value.trim(),
+      });
+    } else if (source === 'zip_upload') {
+      const file = $('skillZipInput').files[0];
+      if (!file) throw new Error('请先选择 ZIP 文件');
+      setSkillInstallProgress(25, '正在读取 ZIP 文件...');
+      const zip_data = arrayBufferToBase64(await file.arrayBuffer());
+      setSkillInstallProgress(55, '正在上传并解压 ZIP...');
+      result = await api('POST', '/api/skills/upload', {
+        source_type: 'zip_upload',
+        name: f.elements.display_name.value.trim(),
+        description: f.elements.display_description.value.trim(),
+        zip_data,
+      });
+    } else {
+      const files = Array.from($('skillDirInput').files || []);
+      if (!files.length) throw new Error('请先选择 Skill 文件夹');
+      setSkillInstallProgress(25, `正在读取 ${files.length} 个文件...`);
+      const uploadFiles = await Promise.all(files.map(fileToUpload));
+      setSkillInstallProgress(55, '正在上传并解析目录...');
+      result = await api('POST', '/api/skills/upload', {
+        source_type: 'local_dir_upload',
+        name: f.elements.display_name.value.trim(),
+        description: f.elements.display_description.value.trim(),
+        files: uploadFiles,
+      });
+    }
+    setSkillInstallProgress(82, '正在注册识别到的 Skill...');
+    f.reset();
+    $('skillDirInput').value = '';
+    $('skillZipInput').value = '';
+    syncChoiceGroup(f, 'source_type');
+    updateSkillSourceUI();
+    setSkillInstallProgress(100, `完成，已注册 ${result?.count || result?.skills?.length || 1} 个 Skill`);
+    toast(`已安装 ${result?.count || result?.skills?.length || 1} 个 Skill`);
+    await refreshSkills();
+    hideSkillInstallProgress();
+    setTimeout(closeExtensionDialog, 780);
+  } catch (e) {
+    setSkillInstallProgress(100, '解析失败：' + e.message);
+    toast('安装失败：' + e.message, 'error');
+    hideSkillInstallProgress(2400);
+  }
+});
+const mcpForm = $('mcpForm');
+if (mcpForm) setupChoiceGroup(mcpForm, 'transport');
+if (mcpForm) mcpForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const f = ev.currentTarget;
+  try {
+    const transport = f.elements.transport.value;
+    const address = f.elements.address.value.trim();
+    setMcpInstallProgress(15, '正在准备 MCP 配置...');
+    setMcpInstallProgress(42, transport === 'stdio' ? '正在启动并握手 stdio server...' : '正在连接 MCP server...');
+    const r = await api('POST', '/api/mcp', {
+      name: f.elements.name.value.trim(),
+      description: f.elements.description.value.trim(),
+      transport,
+      command: transport === 'stdio' ? address : '',
+      url: transport === 'stdio' ? '' : address,
+    });
+    const tools = r.server?.config?.tools || [];
+    const status = r.server?.config?.status || 'unknown';
+    setMcpInstallProgress(100, status === 'error' ? '连接完成，但工具发现失败' : `完成，发现 ${tools.length} 个工具`);
+    f.reset();
+    syncChoiceGroup(f, 'transport');
+    toast(status === 'error' ? '已添加 MCP，但工具发现失败' : `已添加 MCP，发现 ${tools.length} 个工具`, status === 'error' ? 'error' : 'ok');
+    await refreshMcp();
+    hideMcpInstallProgress(status === 'error' ? 2200 : 900);
+    if (status !== 'error') setTimeout(closeExtensionDialog, 780);
+  } catch (e) {
+    setMcpInstallProgress(100, '连接失败：' + e.message);
+    toast('添加失败：' + e.message, 'error');
+    hideMcpInstallProgress(2400);
+  }
+});
+$('refreshSkillBtn')?.addEventListener('click', refreshSkills);
+$('refreshMcpBtn')?.addEventListener('click', refreshMcp);
 
 /* =====================================================================
    人格切换（数据驱动 —— 选项来自 /api/personas，新增人格不需要改前端）
@@ -4751,9 +5792,10 @@ async function refreshPersonas() {
       const pid = el.dataset.pid;
       try { await api('PUT', '/api/personas/active', { mode: pid }); }
       catch (e) { toast('切换失败：' + e.message, 'error'); return; }
-      toast('已切换人格');
+      toast('已切换人格，新会话已开始');
       closePersonaPopover();   // 选中后自动关闭 popover
       refreshPersonas();
+      loadGreeting();
     };
     el.addEventListener('click', handler);
     el.addEventListener('keydown', (ev) => {
@@ -4772,8 +5814,9 @@ if (_personaToggleEl) _personaToggleEl.addEventListener('change', async (e) => {
     e.target.checked = !on;
     return;
   }
-  toast(on ? '已开启 🎲 随机模式' : '已关闭随机模式');
+  toast(on ? '已开启随机模式，新会话已开始' : '已关闭随机模式，新会话已开始');
   refreshPersonas();
+  loadGreeting();
 });
 
 /* persona popover 开关 */
@@ -5879,6 +6922,7 @@ async function bootstrap() {
   refreshMemory();
   refreshDevice();
   refreshSkills();
+  refreshMcp();
   refreshCalendar();
   // 月份选择器在这里第一次填充：此时 _acctViewYear/_acctViewMonth 已经初始化
   if (typeof _populateAcctPicker === 'function') _populateAcctPicker();

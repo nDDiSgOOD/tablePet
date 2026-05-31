@@ -43,6 +43,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -178,12 +179,104 @@ async def node_tool_call(state: AgentState) -> dict[str, Any]:
     }
 
 
+def _strip_tool_markup(text: str) -> str:
+    """去掉模型误当正文输出的 DSML/tool_calls 包裹，避免暴露给用户。"""
+    import re as _re
+
+    if not text:
+        return text
+    s = text
+    # DeepSeek/R1 偶发把工具调用以 DSML 文本输出。支持半角/全角竖线和 tool/function 两种命名。
+    s = _re.sub(r"<[｜|]{1,2}DSML[｜|]{1,2}(?:tool_calls|function_calls)>[\s\S]*?</[｜|]{1,2}DSML[｜|]{1,2}(?:tool_calls|function_calls)>", "", s)
+    s = _re.sub(r"<(?:tool_calls|function_calls)>[\s\S]*?</(?:tool_calls|function_calls)>", "", s)
+    s = _re.sub(r"<[｜|]{1,2}DSML[｜|]{1,2}[\s\S]*$", "", s)
+    return s.strip()
+
+
+def _runtime_context_message() -> dict[str, str]:
+    """Append volatile facts near the user turn so the stable prompt prefix remains cacheable."""
+    now = datetime.now().astimezone()
+    weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+    offset = now.strftime("%z")
+    return {
+        "role": "system",
+        "content": (
+            "## 运行时上下文\n"
+            f"- 当前本地时间：{now.strftime('%Y-%m-%d %H:%M:%S')} {weekdays[now.weekday()]} "
+            f"(UTC{offset[:3]}:{offset[3:]})\n"
+            "- 用户询问今天、现在、明天、昨天、本周、刚才等时间相关问题时，以这里为准。\n"
+            "- 不要主动复述这段上下文，除非用户明确询问时间或日期。"
+        ),
+    }
+
+
+def _response_with_content(response: Any, content: str) -> Any:
+    """复制响应并替换 message.content，避免后续 extract_text 读到工具标记。"""
+    import copy as _copy
+
+    if not isinstance(response, dict):
+        return response
+    out = _copy.deepcopy(response)
+    try:
+        choices = out.get("choices") or []
+        if choices:
+            msg = choices[0].setdefault("message", {})
+            msg["content"] = content
+    except Exception:
+        return response
+    return out
+
+
+def _parse_textual_tool_calls(content: str) -> list[dict[str, Any]]:
+    """把 DeepSeek 偶发输出的 DSML 文本工具调用转成 OpenAI-compatible tool_calls。"""
+    import html as _html
+    import json as _json
+    import re as _re
+
+    if not content or "invoke" not in content or "parameter" not in content:
+        return []
+    calls: list[dict[str, Any]] = []
+    invoke_re = _re.compile(r"<[^>]*invoke\s+name=[\"']([^\"']+)[\"'][^>]*>([\s\S]*?)</[^>]*invoke>", _re.I)
+    param_re = _re.compile(
+        r"<[^>]*parameter\s+name=[\"']([^\"']+)[\"'](?:\s+string=[\"'](true|false)[\"'])?[^>]*>([\s\S]*?)</[^>]*parameter>",
+        _re.I,
+    )
+    for idx, match in enumerate(invoke_re.finditer(content)):
+        name = _html.unescape(match.group(1)).strip()
+        if not name:
+            continue
+        args: dict[str, Any] = {}
+        for param in param_re.finditer(match.group(2)):
+            key = _html.unescape(param.group(1)).strip()
+            raw = _html.unescape(param.group(3)).strip()
+            is_string = (param.group(2) or "").lower() == "true"
+            if not key:
+                continue
+            if is_string:
+                args[key] = raw
+                continue
+            try:
+                args[key] = _json.loads(raw) if raw else None
+            except Exception:
+                args[key] = raw
+        calls.append({
+            "id": f"textual_tool_call_{idx}",
+            "type": "function",
+            "function": {
+                "name": name,
+                "arguments": _json.dumps(args, ensure_ascii=False),
+            },
+        })
+    return calls
+
+
 async def node_llm(state: AgentState) -> dict[str, Any]:
     """构造 prompt 并调用主对话模型 / Build prompt then call chat LLM."""
     from ..services.chat import call_deepseek_messages, extract_text, extract_metrics
     from ..services.tokens import count_messages_tokens
     from ..services.memory_summarizer import summarize_to_short_term
     from ..config import MEMORY_CONTEXT_BUDGET_TOKENS
+    import json as _json
     import time as _time
 
     text = state.get("text") or ""
@@ -212,29 +305,38 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
             "你是 TablePet——一只会聊天、有情绪、有记忆的桌面宠物。"
             "你说话自然、口语化、带一点撒娇感。"
         )
-    # 随机模式下，强制 LLM 忽略历史回复语气，严格按照本轮抽到的人格说话。
-    # 否则模型会从 history 里 assistant 之前的语气延续过来，造成"看起来没换人格"。
-    if is_random_mode:
-        persona = (
-            f"⚠️ 本轮人格：「{persona_label}」（随机模式 / id={persona_id}）。\n"
-            "你必须严格按照下面这一段人格设定说话，**完全忽略历史对话里你自己之前的语气、口头禅和自称**。"
-            "随机模式的特性就是每一轮回复风格都不同，这是预期行为；如果上一轮你叫自己「喵酱」，本轮人格不让你这样叫，你就要换。\n"
-            "⚠️ 即使在随机模式下，也绝对不要输出括号动作描写、emoji、Markdown —— 全部输出都会被 TTS 念出来。\n\n"
-            + persona
-        )
+    # 每轮都强制声明当前人格，避免同一会话历史里的旧 assistant 语气把新人格"拖回去"。
+    # 随机模式只是额外强调每轮风格可变；手动切换也必须立即生效。
+    persona = (
+        f"⚠️ 当前生效人格：「{persona_label}」（id={persona_id}"
+        + ("，随机模式" if is_random_mode else "")
+        + "）。\n"
+        "你必须严格按照当前人格设定回复，完全忽略历史对话里你自己之前的语气、口头禅、自称和称呼习惯。"
+        "如果用户刚切换人格，本轮必须立刻体现新风格。\n"
+        "⚠️ 不要输出括号动作描写、emoji、Markdown —— 全部输出都会被 TTS 念出来。\n\n"
+        + persona
+    )
     import logging as _logging
     _logging.getLogger(__name__).info(
         "node_llm persona=%s mode_random=%s user=%s",
         persona_id, is_random_mode, state.get("user_id"),
     )
-    system = persona + "\n\n" + system_block if system_block else persona
+    user_id = state.get("user_id") or "tablepet"
+    try:
+        from ..services.agent_extensions import build_agent_extension_context, build_agent_tools, dispatch_agent_tool
+        extension_context = build_agent_extension_context(user_id)
+        agent_tools = build_agent_tools(user_id)
+    except Exception:
+        extension_context = ""
+        agent_tools = []
+    context_parts = [p for p in (system_block, extension_context) if p]
+    system = persona + ("\n\n" + "\n\n".join(context_parts) if context_parts else "")
 
     history = state.get("history") or []
-    messages = [{"role": "system", "content": system}, *history, {"role": "user", "content": text}]
+    messages = [{"role": "system", "content": system}, *history, _runtime_context_message(), {"role": "user", "content": text}]
 
     total_tokens = count_messages_tokens(messages)
     if total_tokens > MEMORY_CONTEXT_BUDGET_TOKENS:
-        user_id = state.get("user_id") or "tablepet"
         try:
             await summarize_to_short_term(user_id, force=True)
         except Exception:
@@ -242,24 +344,90 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
         from ..services.memory_recall import load_memory_context
 
         ctx = await load_memory_context(user_id, query_text=text)
-        system = persona + "\n\n" + ctx.to_system_block()
+        context_parts = [p for p in (ctx.to_system_block(), extension_context) if p]
+        system = persona + ("\n\n" + "\n\n".join(context_parts) if context_parts else "")
         history = ctx.to_messages(include_ephemeral=True)
         messages = [
             {"role": "system", "content": system},
             *history,
+            _runtime_context_message(),
             {"role": "user", "content": text},
         ]
 
-    user_id = state.get("user_id") or "tablepet"
     started = _time.perf_counter()
     try:
-        resp = await call_deepseek_messages(
-            messages,
-            max_tokens=600,
-            user_id=user_id,
-            purpose="chat",
-            session_id=None,  # 这里还不知道 turn 写到哪个 session，下面 save 节点统一处理
-        )
+        metrics_seen: list[dict[str, int]] = []
+        resp = None
+        max_tool_iters = 12
+        for iter_idx in range(max_tool_iters):
+            resp = await call_deepseek_messages(
+                messages,
+                max_tokens=700,
+                user_id=user_id,
+                purpose="chat",
+                session_id=None,  # 这里还不知道 turn 写到哪个 session，下面 save 节点统一处理
+                tools=agent_tools or None,
+            )
+            metrics_seen.append(extract_metrics(resp))
+            choices = (resp or {}).get("choices") if isinstance(resp, dict) else []
+            msg = ((choices[0] or {}).get("message") if choices else {}) or {}
+            raw_content = str(msg.get("content") or "") if isinstance(msg, dict) else ""
+            visible_content = _strip_tool_markup(raw_content)
+            tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else None
+            if not isinstance(tool_calls, list):
+                tool_calls = []
+            # 有些 DeepSeek/R1 兼容端会把工具调用以 DSML 文本塞进 content，而不是返回原生 tool_calls。
+            # 后端把它修复成真实 tool call，避免工具调用文本直接出现在聊天气泡里。
+            if agent_tools and not tool_calls:
+                tool_calls = _parse_textual_tool_calls(raw_content)
+            if not agent_tools or not tool_calls:
+                resp = _response_with_content(resp, visible_content)
+                break
+
+            tool_messages = []
+            for call in tool_calls[:3]:
+                fn = (call.get("function") or {}) if isinstance(call, dict) else {}
+                name = str(fn.get("name") or "")
+                raw_args = str(fn.get("arguments") or "{}")
+                try:
+                    args = _json.loads(raw_args) if raw_args.strip() else {}
+                    if not isinstance(args, dict):
+                        args = {}
+                except Exception:
+                    args = {}
+                result = await dispatch_agent_tool(user_id, name, args)
+                tool_messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.get("id") or name,
+                    "name": name,
+                    "content": result,
+                })
+            messages = [
+                *messages,
+                {
+                    "role": "assistant",
+                    "content": visible_content,
+                    "tool_calls": tool_calls,
+                },
+                *tool_messages,
+            ]
+            if iter_idx == max_tool_iters - 1:
+                messages.append({
+                    "role": "user",
+                    "content": "工具调用轮次已到上限。请不要再调用工具，直接基于已有工具结果给用户一个简短结论；如果失败，说明还缺哪些具体参数。",
+                })
+                resp = await call_deepseek_messages(
+                    messages,
+                    max_tokens=500,
+                    user_id=user_id,
+                    purpose="chat",
+                    session_id=None,
+                    tools=None,
+                )
+                metrics_seen.append(extract_metrics(resp))
+                final_choices = (resp or {}).get("choices") if isinstance(resp, dict) else []
+                final_msg = ((final_choices[0] or {}).get("message") if final_choices else {}) or {}
+                resp = _response_with_content(resp, _strip_tool_markup(str(final_msg.get("content") or "")))
     except Exception as exc:
         elapsed = int((_time.perf_counter() - started) * 1000)
         return {
@@ -270,7 +438,14 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
         }
 
     elapsed = int((_time.perf_counter() - started) * 1000)
-    metrics = extract_metrics(resp)
+    if "metrics_seen" in locals() and metrics_seen:
+        metrics = {
+            "prompt_tokens": sum(m["prompt_tokens"] for m in metrics_seen),
+            "completion_tokens": sum(m["completion_tokens"] for m in metrics_seen),
+            "total_tokens": sum(m["total_tokens"] for m in metrics_seen),
+        }
+    else:
+        metrics = extract_metrics(resp)
     return {
         "messages": messages,
         "raw_model_output": resp,
@@ -289,8 +464,6 @@ async def node_parse(state: AgentState) -> dict[str, Any]:
     在这里顺便做 TTS 友好清洗：去掉括号动作描写、emoji、Markdown 标记，
     防止 USB / WiFi 端把 "（歪头思考）" 这种舞台说明真的念出来。
     """
-    import re as _re
-
     text = state.get("assistant_text") or ""
     cleaned = _sanitize_for_tts(text) if text else text
     return {"assistant_text": cleaned, "state_update": {}, "memory_update": {}}

@@ -1,43 +1,155 @@
-# TablePet 🐱
+# TablePet
 
-> 一只长在桌面 / USB / WiFi 三端的会聊天、有情绪、有记忆的宠物。
->
-> FastAPI + LangGraph + SQLite + DeepSeek，单进程跑得起来，本地化数据，所有对话与记忆都落在本机。
+> 一个运行在本机的桌面宠物 Agent。它会聊天，会记住你，会切换人格，也能通过 Skill、MCP 和本地工具扩展自己的能力。
 
----
+TablePet 是一个偏个人工作台的 AI 桌宠项目。它不是单纯的聊天窗口，而是把对话、记忆、人格、状态、日记、工具调用和本地设备连接放在同一个本地服务里。默认数据落在 SQLite，本地启动即可使用，适合做个人陪伴、桌面助手、硬件桌宠网关和 Agent 扩展实验。
 
-## ✨ 特性
-
-- **多通道接入**：浏览器 dashboard、ESP32 USB 串口、WiFi 终端共用同一个对话内核。
-- **四级记忆体系**：临时上下文 → 短期摘要 → 长期事实 → AI 用户画像，自动晋升 + 衰减。
-- **LangGraph 编排**：load_context → detect_intent → policy → tool_call → llm → parse → save 七节点骨架。
-- **可切人格 / 随机人格**：内置 9 个人格，前端开关一键开启「每条消息随机一个人格回复」。
-- **改名即换页**：把桌宠改名时自动归档当前会话、开新 session，避免 LLM 顺着旧 assistant 历史继续用旧名自称。
-- **TTS 友好输出**：自动剥掉 `（歪头思考）` 一类舞台说明 + emoji + Markdown，USB / WiFi 端走 TTS 不会念违和。
-- **LLM 账号管理**：DeepSeek API Key 落库，主对话走 chat_model、记忆 / 画像 / 开场白走 summary_model；前端实时查余额。
-- **AI 用户画像**：综合「用户主动填写的最新简介 + AI 上一版画像 + 短期长期记忆」三段式生成。
-- **桌宠状态**：心情 / 活力 / 等级 / 经验，由对话频率与每小时心情节律共同推动。
-- **日记日历**：每天会话自动汇总成日记，可在日历上回看 / 重新总结 / 续接历史会话。
-- **APScheduler 后台任务**：小时心情、每日总结、画像维护全自动。
-- **数据全部本地**：单文件 SQLite，不上云，随时备份。
+[GitHub](https://github.com/nDDiSgOOD/tablePet) · [Dashboard](http://localhost:8000) · [Design Notes](DESIGN.md)
 
 ---
 
-## 🎨 Dashboard 视觉系统
+## Highlights
 
-`app/web/dashboard.html` 是单文件前端，承载所有功能面板。它有自己的设计契约（见 [DESIGN.md](DESIGN.md)），近期重点：
-
-- **双主题**：深色（默认，"夜里的木桌"）+ 浅色（温润象牙白），全部 OKLCH token，避开 AI cream / beige 默认。
-- **Sidebar 信息架构**：左上 brand（去 emoji，含 GitHub 入口）→ 对话主入口（玻璃发光按钮）→ 主功能区 → 二级模块（用户简介 / TablePet 状态 / 账户情况）→ 工具区（主题切换 / 设置）。
-- **Topbar chip 交互**：点桌宠名跳宠物状态、点人格弹出选择 popover、点余额跳账户面板，三处全部可点。
-- **Chat stage**：聊天作为主体，输入框靠底（`margin-top:auto`），头像随用户简介 / 桌宠状态实时同步。
-- **Anti-pattern 清单**：严禁 emoji 出现在产品 chrome、严禁渐变文字、严禁 border-left 4px 侧边色条、严禁卡片栅格堆砌。emoji 仅允许出现在「桌宠 / 人格 / 心情」语境（如人格卡片的设定符号）。
+- **本地优先**：会话、记忆、账号配置、Skill/MCP 元数据都落在本机 SQLite，Skill 文件安装到本地 `data/skills/`。
+- **长期记忆**：临时上下文、短期摘要、长期事实、主人画像、日记日历共同组成记忆系统。
+- **人格系统**：支持固定人格和随机人格，切换人格时自动开启新会话，避免旧语气污染新风格。
+- **Skill 扩展**：支持本地文件夹、ZIP、GitHub 仓库安装 Skill，自动识别集合型仓库里的多个 `SKILL.md`。
+- **MCP 管理**：支持 stdio、Streamable HTTP、SSE，连接后发现工具列表，并提供参数化调试台。
+- **Agent Tool Loop**：支持 `run_skill`、`call_mcp_tool`、本地音乐控制等工具调用，工具结果不会直接泄露到聊天气泡。
+- **本地软件控制**：内置 QQ 音乐、网易云音乐的启动、播放暂停、上一首、下一首和系统音量控制。
+- **多通道入口**：浏览器 dashboard、ESP32 USB 串口、WiFi 终端可以共用同一个对话内核。
 
 ---
 
-## 🚀 快速开始
+## What It Feels Like
 
-### 1. 克隆并装依赖
+TablePet 的目标不是做一个重型管理后台，而是做一个安静、可靠、能长期陪伴的桌面工作台。
+
+- 你可以和它正常聊天，它会结合长期记忆和当前状态回复。
+- 你可以让它切换成不同人格，也可以让它每次随机一个人格。
+- 你可以给它安装 Skill，让它按需读取本地 `SKILL.md`。
+- 你可以连接 MCP server，让它调用外部工具。
+- 你可以让它打开音乐软件、切歌、调音量。
+- 你可以回看日记、会话流水、主人画像和桌宠状态。
+
+---
+
+## Core Modules
+
+### Dashboard
+
+`app/web/dashboard.html` 是单文件 dashboard，承载全部产品界面。
+
+- 文字对话：底部输入、思考态、工具调用进度、TTS 去重。
+- 宠物校园：Skill 和 MCP 统一入口，tab 管理，弹窗添加。
+- 记忆管理：会话流水、日记日历、主人画像、长期事实。
+- 账户情况：LLM 账号、余额、模型探测、chat/summary 模型分流。
+- 用户简介：用户主动填写资料，作为画像和记忆系统的事实源。
+- TablePet 状态：心情、活力、经验、陪伴天数、桌宠名称。
+
+### Memory
+
+TablePet 的记忆不是只把历史对话塞进 prompt。
+
+| 层级 | 说明 |
+| --- | --- |
+| 临时上下文 | 最近若干轮对话，保留即时语境 |
+| 短期摘要 | 会话片段压缩，降低 token 压力 |
+| 长期事实 | 从对话中沉淀出的稳定事实 |
+| 主人画像 | AI 维护的用户画像，结合用户主动资料校准 |
+| 日记 | 每日对话自动汇总，可回看和重算 |
+
+### Skill
+
+Skill 是本地可安装的能力说明书。Agent 默认只看到 Skill 索引，需要时再通过 `run_skill` 读取正文。复杂 Skill 可以继续读取目录内文件、搜索内容，并通过 `run_skill_command` 运行 Skill 目录内真实存在的脚本文件。
+
+支持来源：
+
+- 本地文件夹
+- 本地 ZIP
+- GitHub 仓库
+
+支持结构：
+
+```text
+single-skill/
+└── SKILL.md
+```
+
+```text
+skill-pack/
+└── skills/
+    ├── writer/
+    │   └── SKILL.md
+    └── spreadsheet/
+        └── SKILL.md
+```
+
+### MCP
+
+MCP 管理用于连接外部工具服务。
+
+支持传输方式：
+
+- `stdio`
+- `Streamable HTTP`
+- `SSE`
+
+连接后会自动发现工具列表，并把工具名、描述、参数 schema、必填字段注入给 Agent。Dashboard 提供 MCP 调试台，用户不需要手写原始 JSON，可以直接按参数表单调试工具。
+
+### Local App Control
+
+TablePet 内置了一个本地音乐控制工具，当前面向 macOS：
+
+- 打开 QQ 音乐或网易云音乐
+- 播放或暂停
+- 上一首或下一首
+- 设置系统音量
+- 音量升高或降低
+
+实现上优先使用 Swift/CoreGraphics 发送系统媒体键事件，并回退到 AppleScript。播放控制需要 macOS 辅助功能权限。建议用 `scripts/run_tablepet_local.command` 从 Terminal 启动，这样授权对象是 Terminal，而不是 IDE。
+
+---
+
+## Architecture
+
+```text
+Browser Dashboard / USB / WiFi
+        |
+        v
+FastAPI Gateway
+        |
+        v
+LangGraph Agent
+        |
+        +--> Memory Context
+        +--> Persona Prompt
+        +--> Skill Index + run_skill
+        +--> MCP Index + call_mcp_tool
+        +--> Local App Tools
+        |
+        v
+LLM Provider
+```
+
+主要目录：
+
+```text
+app/
+├── agent/                 # LangGraph 编排和 tool loop
+├── routers/               # FastAPI API 路由
+├── services/              # 记忆、人格、Skill/MCP、本地工具等业务逻辑
+├── storage/               # SQLite schema 和持久化访问
+├── usb/                   # ESP32 串口桥
+├── utils/                 # 音频、ADPCM、FFmpeg 等工具
+└── web/dashboard.html     # 单文件 dashboard
+```
+
+---
+
+## Quick Start
+
+### 1. Install
 
 ```bash
 git clone https://github.com/nDDiSgOOD/tablePet.git
@@ -48,144 +160,203 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> 建议 Python 3.10+。`faster-whisper` 第一次会自动下载模型，可设 `TABLEPET_ASR_MODEL=tiny` 减小体积。
+建议使用 Python 3.10 或更高版本。`faster-whisper` 第一次使用会自动下载模型，可以通过 `TABLEPET_ASR_MODEL=tiny` 减小体积。
 
-### 2. 配置环境（可选）
+### 2. Configure
 
 ```bash
 cp .env.example .env
-# 编辑 .env，配置 ASR/TTS/USB/天气等可选项
 ```
 
-DeepSeek 的 API Key **不再走环境变量**——在 dashboard 的「账户情况」面板里填写、保存即可，秘钥落库持久化。
+LLM API Key 不需要写进环境变量。启动 dashboard 后，在「账户情况」里添加账号、选择模型即可。
 
-### 3. 启动
+### 3. Run
+
+普通启动：
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-首次启动会自动执行：
+推荐本地启动脚本：
 
-- `data/` 目录下创建 `tablepet.db` 并建表
-- 注册路由、挂载 USB 串口监听（如启用）、启动后台 APScheduler
-
-打开 [http://localhost:8000](http://localhost:8000) 就能看到 dashboard。
-
----
-
-## 📁 目录结构
-
+```bash
+./scripts/run_tablepet_local.command
 ```
-tablePet/
-├── app/
-│   ├── main.py              # FastAPI 入口
-│   ├── config.py            # 环境变量 / 全局配置
-│   ├── memory.py            # DEFAULT_USER_ID 等常量
-│   ├── schemas.py           # Pydantic 模型
-│   ├── agent/               # LangGraph 编排
-│   │   ├── graph.py           # 7 节点骨架（含人格注入 / TTS 清洗）
-│   │   ├── runtime.py
-│   │   └── contract.py
-│   ├── routers/             # FastAPI 路由
-│   │   ├── chat.py            # 对话入口（多通道）
-│   │   ├── memory.py          # 日记 / 画像 / 日历
-│   │   ├── personas.py        # 人格切换 API
-│   │   ├── llm_account.py     # DeepSeek 账号 + 余额
-│   │   ├── ui_settings.py     # 前端持久化 UI 配置
-│   │   ├── interactions.py    # 经验 / 状态事件
-│   │   ├── asr.py / tts.py / vision.py / music.py / telemetry.py / health.py
-│   │   └── dashboard.py       # 静态 dashboard.html
-│   ├── services/            # 业务逻辑
-│   │   ├── chat.py            # call_deepseek_messages（统一 LLM 入口）
-│   │   ├── personas.py        # 人格枚举 + 随机抽取
-│   │   ├── memory_summarizer.py  # 短期/日报/画像/宠物心情自动总结
-│   │   ├── memory_recall.py   # 记忆召回 + system_block 拼装
-│   │   ├── intent.py / dialogue_policy.py / tool_registry.py
-│   │   ├── prompt_builder.py / response_parser.py
-│   │   ├── relationship_memory.py / agent_state.py
-│   │   ├── scheduler.py       # APScheduler 任务
-│   │   ├── embedding.py / tokens.py / context.py
-│   │   ├── asr.py / tts.py / music.py / weather.py / vision.py
-│   │   └── observability.py
-│   ├── storage/             # SQLite 持久层
-│   │   ├── db.py              # schema + 迁移 + 连接池
-│   │   ├── conversation_store.py   # turn / session
-│   │   ├── short_term_store.py     # 短期摘要
-│   │   ├── long_term_store.py      # 长期事实 + 向量
-│   │   ├── memory_store.py / vector.py
-│   │   ├── pet_state.py            # 心情 / 活力 / 等级
-│   │   ├── insight_store.py        # 日记
-│   │   ├── user_profile.py / ui_settings.py / llm_account.py
-│   │   └── session_store.py
-│   ├── usb/                 # ESP32 串口桥
-│   ├── utils/               # adpcm / audio / ffmpeg
-│   ├── tests/               # 单测
-│   └── web/dashboard.html   # 单文件前端
-├── data/                    # ⚠️ 数据库目录，仓库只保留 .gitkeep；启动时自动创建 *.db
-├── media/                   # 音乐 / 音频缓存
-├── models/                  # 本地 ASR 模型缓存
-├── requirements.txt
-├── .env.example
-├── README.md
-└── demo.py
+
+脚本会自动检测 `8000` 是否被占用，如果已被其他服务占用，会顺延到下一个可用端口。终端会打印实际 dashboard 地址，例如：
+
+```text
+Dashboard: http://localhost:8001
 ```
 
 ---
 
-## 💾 数据库说明
+## Data And Privacy
 
-**TablePet 不在仓库里携带任何用户数据**：
+TablePet 不会把用户数据提交到仓库。
 
-- `data/tablepet.db` 由 [`app/storage/db.py`](app/storage/db.py) 在启动时自动 `mkdir + CREATE TABLE`。
-- `.gitignore` 已经排除 `data/*.db` / `*.db-shm` / `*.db-wal`，但**保留** `data/.gitkeep` 让目录存在。
-- `git clone` 后第一次 `uvicorn app.main:app` 即可正常使用。
+- SQLite 数据库默认在 `data/tablepet.db`。
+- Skill 文件默认安装到 `data/skills/`。
+- `.gitignore` 已排除 `data/*.db`、`*.db-shm`、`*.db-wal` 和本地 Skill 数据。
+- 删除 `data/tablepet.db*` 后，下次启动会自动重新建库。
 
-主要表：
+主要数据表：
 
 | 表 | 说明 |
 | --- | --- |
-| `conversation_session / conversation_turn` | 会话 + 每轮对话 |
-| `short_term_memory` | 一段时间内的对话摘要 |
-| `long_term_memory` | 晋升后的长期事实，带向量 |
+| `conversation_session` / `conversation_turn` | 会话和每轮对话 |
+| `short_term_memory` | 短期摘要 |
+| `long_term_memory` | 长期事实和向量 |
 | `daily_summary` | 每日日记 |
 | `user_profile` | 用户主动填写的资料 |
-| `ai_user_profile` | AI 自动维护的画像 |
-| `pet_state` | 心情 / 活力 / 等级 / 经验 |
-| `llm_account` | DeepSeek 账号 + 模型选择 |
-| `ui_settings` | 前端持久化设置（含人格 mode） |
+| `ai_user_profile` | AI 维护的主人画像 |
+| `pet_state` | 心情、活力、等级、经验 |
+| `llm_account` | LLM 账号和模型配置 |
+| `agent_extension` | Skill/MCP 元数据和配置 |
+| `ui_settings` | 前端持久化设置 |
 
 ---
 
-## 🎭 人格切换
+## Working With Skills
 
-在 dashboard「人格切换」面板：
+一个最小 Skill：
 
-- **滑动开关 OFF**：下方显示 8 张人格卡，挑一个就固定用这个人格。
-- **滑动开关 ON**：进入 🎲 随机模式，**每次发消息后端都临时抽一个人格回复**——傲娇、古风、咸鱼、闺蜜……风格不固定。
+```markdown
+---
+name: writer
+description: Help draft and polish short Chinese copy
+---
 
-新增人格只需要往 [`app/services/personas.py`](app/services/personas.py) 的 `PERSONAS` 字典加一项，前端会自动出现新选项。
+When the user asks for writing help, clarify the audience, tone, length, and output format.
+Prefer concise Chinese unless the user asks otherwise.
+```
+
+注意：frontmatter 里的 `name` 应该是稳定英文标识，展示名称和备注可以在 dashboard 安装时自定义。
+
+安装后，Agent prompt 里只保留索引：
+
+```text
+writer - Help draft and polish short Chinese copy
+```
+
+真正需要使用时，Agent 会调用：
+
+```json
+{
+  "name": "run_skill",
+  "arguments": {
+    "name": "writer",
+    "arguments": "帮我润色这段产品介绍"
+  }
+}
+```
+
+### Script Skills
+
+复杂 Skill 不止一个 `SKILL.md` 时，Agent 可以继续使用受限工作区工具：
+
+| 工具 | 作用 |
+| --- | --- |
+| `list_skill_files` | 列出 Skill 目录内的文件 |
+| `read_skill_file` | 读取 Skill 目录内的文本文件，支持 `head` / `tail` / `range` |
+| `search_skill_files` | 在 Skill 目录内搜索文本 |
+| `run_skill_command` | 在 Skill 目录内运行安全命令和真实存在的脚本文件，比如 `ls`、`cat`、`grep`、`rg`、`find`、`python scripts/echo.py`、`scripts/echo.py`、`python -m pytest` |
+
+这些工具都会把路径限制在当前 Skill 目录里。`run_skill_command` 使用 `shell=false`，可以运行 Skill 目录内真实存在的 Python/Node/Shell 脚本文件，不要求这些脚本提前写在 `SKILL.md` 的 `script` 字段里；但不支持 `python -c`、`node -e`、管道、重定向、`&&`、`;`、命令替换或环境变量展开；需要切目录时使用 `cwd` 参数，不依赖持久 `cd`。
+
+如果某个 Skill 想提供一个固定的声明式脚本入口，也可以在 `SKILL.md` frontmatter 里显式声明：
+
+```markdown
+---
+name: data_cleaner
+description: Clean a CSV file with the bundled Python script
+allowed-tools: run_skill_script
+script: scripts/clean.py
+script-runtime: python
+---
+
+Use this skill when the user wants to clean a local CSV. Ask for the file path first, then run the declared script with that path as an argument.
+```
+
+限制：
+
+- `script` 必须是 Skill 目录内的相对路径，不能使用绝对路径或 `..` 跳出目录。
+- 支持运行时：`python`、`node`、`bash`、`sh`。
+- 默认运行模式是 `local`，也就是在启动 TablePet 的本机进程里开子进程执行。
+- 可以通过工具参数或环境变量 `TABLEPET_SKILL_SCRIPT_MODE=sandbox` 使用 macOS `sandbox-exec` 的 best-effort 沙箱。
+- 沙箱模式不是完整容器隔离。更强隔离建议接 Docker、Firecracker、nsjail 或远端执行服务。
 
 ---
 
-## 🛠 常见问题
+## Working With MCP
 
-- **「点重新总结提示今天没来找我聊天」**：那一天确实没有 turn 落库，请先发几条消息再总结。
-- **「点生成画像 502」**：先去 dashboard 配 DeepSeek 账号；总结类调用走 `summary_model`，对话走 `chat_model`。
-- **「随机模式 LLM 还在保持上一句的语气」**：[`app/agent/graph.py`](app/agent/graph.py) 里随机模式会强制 prompt「忽略历史语气」，且 `_sanitize_for_tts` 会剥掉括号动作；如果还有问题，看终端日志 `node_llm persona=...` 确认每条消息真的在重抽。
-- **「改名后桌宠还在用旧名自称」**：从 `frontend_optimation` 分支起，PUT `/api/pet/status` 检测到 name 变更会自动 `close_session_with_summary` + 写一条系统事件到新 session，新对话不会再带上旧 assistant 历史。如果你看到旧名复发，多半是浏览器缓存了旧前端代码，刷新 dashboard 即可。
-- **想清空数据**：直接删除 `data/tablepet.db*`，下次启动会重新建库。
+添加 MCP 时选择传输方式，填写连接地址即可。连接成功后，TablePet 会：
+
+- 发起初始化握手。
+- 调用 `tools/list` 获取工具列表。
+- 保存工具 schema 到 SQLite。
+- 在 dashboard 展示工具和调试台。
+- 在 Agent prompt 中注入 server id、工具名、参数说明和必填字段。
+
+如果工具参数缺失，Agent 会先向用户追问，而不是盲目调用。
 
 ---
 
-## 📦 分支
+## Local Music Control
 
-- `main`：稳定版本
-- `memory_control`：四级记忆体系 + 人格随机模式 + LLM 账号统一入口
-- `frontend_optimation`：dashboard 视觉系统重写（双主题 OKLCH token、sidebar 信息架构、chat stage 重排、改名切 session 修复）
+如果要让 TablePet 控制 QQ 音乐或网易云音乐：
+
+1. 用本地脚本启动服务。
+
+```bash
+./scripts/run_tablepet_local.command
+```
+
+2. 在 macOS 打开：
+
+```text
+系统设置 -> 隐私与安全性 -> 辅助功能
+```
+
+3. 给启动 TablePet 的宿主应用授权。用 Terminal 启动就授权 Terminal，用 iTerm 启动就授权 iTerm。
+
+4. 对桌宠说：
+
+```text
+打开 QQ 音乐并播放
+```
+
+```text
+网易云下一首
+```
+
+```text
+把音量调到 30
+```
+
+当前版本是通用媒体控制，不能保证指定歌曲搜索和播放。要实现指定歌曲，需要进一步适配 QQ 音乐或网易云音乐的 URL Scheme 或辅助功能 UI 自动化。
+
+---
+
+## Development Notes
+
+- 人格切换会立即返回，旧会话总结在后台执行，避免前端卡住。
+- Tool loop 最多执行多轮，只有没有 tool call 时才输出最终回复。
+- DeepSeek/R1 兼容端如果把 tool call 以文本吐出，后端会清洗并尝试解析成真实工具调用。
+- 当前时间作为尾部运行时上下文注入，不改稳定 system prompt 前缀，尽量保留缓存命中。
+- Skill/MCP 元数据在 `agent_extension` 表，Skill 正文仍保留为本地文件。
+
+---
+
+## Branches
+
+- `main`：稳定主线。
+- `frontend_optimation`：dashboard 视觉和体验优化。
+- `add_skillnmcp`：Skill、MCP、本地软件控制和 Agent 工具链能力。
 
 ---
 
 ## License
 
-仅供学习 / 个人桌面伴侣使用。
+仅供学习、研究和个人桌面伴侣使用。

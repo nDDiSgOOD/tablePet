@@ -575,26 +575,49 @@ async def close_session_with_summary(user_id: str) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# 6) 开场白：结合宠物名 / 心情 / 人设 / AI 备注
+# 6) 开场白：结合人格 + 长短期记忆 + 画像动态生成
 # ---------------------------------------------------------------------------
 GREETING_SYSTEM = (
-    "你是 TablePet 桌宠本人。请用第一人称、口语化、≤30 字写一句开场白，"
-    "结合给定的当前心情、活力、人设、最近的状态备注，让主人感到你是有'人格连续性'的。"
-    "不要使用 markdown，不要列表，不要英文。直接输出一句话。"
+    "你是 TablePet 桌宠本人。请根据当前人格、用户画像、事实、短期记忆摘要、"
+    "召回的长期记忆和宠物状态，写一句自然开场白。要求：第一人称，中文口语化，"
+    "≤45 字；不要泛泛地说'今天想聊点啥'；优先提到一件记忆里的具体细节或近况；"
+    "不要重复旧开场白，不要 markdown，不要列表，不要 emoji。直接输出一句话。"
 )
 
 
 async def generate_greeting(user_id: str) -> str:
-    from ..storage import get_pet_state, get_profile, list_recent_short_term
+    import time as _time
+
+    from ..storage import get_pet_state, get_profile
+    from ..storage import get_setting
+    from .memory_recall import load_memory_context
+    from .personas import DEFAULT_MODE, resolve_active_persona
 
     pet = get_pet_state(user_id)
     user = get_profile(user_id)
-    short_terms = list_recent_short_term(user_id, limit=3)
+    try:
+        mode = get_setting(user_id, "pet_persona_mode") or DEFAULT_MODE
+        active_persona = resolve_active_persona(mode)
+    except Exception:
+        mode = DEFAULT_MODE
+        active_persona = resolve_active_persona(DEFAULT_MODE)
+    try:
+        ctx = await load_memory_context(
+            user_id,
+            query_text="生成一条桌宠打开页面时的开场白，优先结合用户最近关心的话题、长期画像和当前状态。",
+            ephemeral_limit=12,
+        )
+        memory_block = ctx.to_system_block()
+    except Exception:
+        memory_block = ""
 
     user_name = (user.get("name") or "").strip()
     name_call = f"主人{user_name}" if user_name else "主人"
 
     bg_lines: list[str] = [
+        f"当前时间：{_time.strftime('%Y-%m-%d %H:%M')}",
+        f"当前人格选择：{mode}；实际人格：{active_persona.get('label', active_persona.get('id', 'default'))}",
+        "当前人格设定：" + active_persona.get("prompt", "")[:600],
         f"你的名字：{pet.get('name') or '小桌'}",
         f"心情：{pet.get('mood', 'neutral')}（{pet.get('mood_score', 60)}/100）",
         f"活力：{pet.get('energy', 70)}/100，等级 Lv.{pet.get('level', 1)}",
@@ -605,11 +628,9 @@ async def generate_greeting(user_id: str) -> str:
         bg_lines.append(f"口头禅：{pet['tagline']}")
     if pet.get("ai_notes"):
         bg_lines.append(f"最近的主观感受：{pet['ai_notes']}")
-    if short_terms:
-        last = short_terms[-1].get("summary") or ""
-        if last:
-            bg_lines.append(f"最近一次会话回忆：{last[:80]}")
     bg_lines.append(f"打招呼对象：{name_call}")
+    if memory_block:
+        bg_lines.append("可用记忆上下文：\n" + memory_block[:3000])
 
     messages = [
         {"role": "system", "content": GREETING_SYSTEM},
@@ -617,7 +638,7 @@ async def generate_greeting(user_id: str) -> str:
     ]
     try:
         resp = await call_deepseek_messages(
-            messages, model=DEEPSEEK_SUMMARY_MODEL, max_tokens=120, temperature=0.85,
+            messages, model=DEEPSEEK_SUMMARY_MODEL, max_tokens=160, temperature=0.95,
             user_id=user_id, purpose="summary.greeting",
         )
         text = extract_text(resp).strip()
