@@ -43,6 +43,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -192,6 +193,23 @@ def _strip_tool_markup(text: str) -> str:
     return s.strip()
 
 
+def _runtime_context_message() -> dict[str, str]:
+    """Append volatile facts near the user turn so the stable prompt prefix remains cacheable."""
+    now = datetime.now().astimezone()
+    weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+    offset = now.strftime("%z")
+    return {
+        "role": "system",
+        "content": (
+            "## 运行时上下文\n"
+            f"- 当前本地时间：{now.strftime('%Y-%m-%d %H:%M:%S')} {weekdays[now.weekday()]} "
+            f"(UTC{offset[:3]}:{offset[3:]})\n"
+            "- 用户询问今天、现在、明天、昨天、本周、刚才等时间相关问题时，以这里为准。\n"
+            "- 不要主动复述这段上下文，除非用户明确询问时间或日期。"
+        ),
+    }
+
+
 def _response_with_content(response: Any, content: str) -> Any:
     """复制响应并替换 message.content，避免后续 extract_text 读到工具标记。"""
     import copy as _copy
@@ -315,7 +333,7 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
     system = persona + ("\n\n" + "\n\n".join(context_parts) if context_parts else "")
 
     history = state.get("history") or []
-    messages = [{"role": "system", "content": system}, *history, {"role": "user", "content": text}]
+    messages = [{"role": "system", "content": system}, *history, _runtime_context_message(), {"role": "user", "content": text}]
 
     total_tokens = count_messages_tokens(messages)
     if total_tokens > MEMORY_CONTEXT_BUDGET_TOKENS:
@@ -332,6 +350,7 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
         messages = [
             {"role": "system", "content": system},
             *history,
+            _runtime_context_message(),
             {"role": "user", "content": text},
         ]
 
