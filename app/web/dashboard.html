@@ -2979,7 +2979,7 @@
     <!-- ====== 6. Skill 管理 ====== -->
     <section id="page-skills" class="page">
       <h2 class="page-title">Skill 管理</h2>
-      <div class="page-sub">通过本地目录、GitHub、Git 或 ZIP 把 Skill 包安装到本机目录，agent 只从本地 Skill 目录读取能力说明。</div>
+      <div class="page-sub">参考 Reasonix：通过本地目录、GitHub、Git 或 ZIP 把 Skill 包安装到本机目录。目录内需要有 SKILL.md，agent 只在需要时用 run_skill 读取正文。</div>
 
       <div class="extension-layout">
         <div class="panel">
@@ -3002,7 +3002,7 @@
               <input name="source_uri" placeholder="/Users/me/my-skill 或 owner/repo 或 https://github.com/owner/repo">
             </label>
             <label>说明
-              <input name="description" placeholder="这个 skill 适合什么时候使用">
+              <input name="description" placeholder="可留空，优先读取 SKILL.md frontmatter 的 description">
             </label>
             <button class="btn primary" type="submit">安装 Skill</button>
           </form>
@@ -3020,7 +3020,7 @@
     <!-- ====== 7. MCP 管理 ====== -->
     <section id="page-mcp" class="page">
       <h2 class="page-title">MCP 管理</h2>
-      <div class="page-sub">配置 agent 可用的 MCP server。支持 stdio、HTTP 和 SSE，也可以从本地文件或 GitHub 导入 JSON 配置。</div>
+      <div class="page-sub">参考 Reasonix 的 MCP spec：保存 stdio、Streamable HTTP 或 SSE 配置，后续可桥接成 agent function tools。</div>
 
       <div class="extension-layout">
         <div class="panel">
@@ -3034,7 +3034,7 @@
             <label>传输方式
               <select name="transport">
                 <option value="stdio">stdio</option>
-                <option value="http">HTTP</option>
+                <option value="http">Streamable HTTP</option>
                 <option value="sse">SSE</option>
               </select>
             </label>

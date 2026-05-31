@@ -112,6 +112,15 @@ def _unique_skill_dir(name: str) -> Path:
     return target
 
 
+def _find_skill_file(root: Path, name: str) -> Path | None:
+    candidates = [root / "SKILL.md", root / f"{_slug_name(name)}.md"]
+    candidates.extend(sorted(root.glob("*.md")))
+    for path in candidates:
+        if path.exists() and path.is_file() and not path.name.startswith("."):
+            return path
+    return None
+
+
 def _copy_dir(src: Path, dst: Path) -> None:
     if not src.exists() or not src.is_dir():
         raise HTTPException(status_code=400, detail="Skill 本地目录不存在。")
@@ -178,6 +187,11 @@ async def _install_skill_dir(payload: SkillPayload) -> tuple[str, Path]:
             await _download_zip(payload.source_uri.strip(), target)
         else:
             raise HTTPException(status_code=400, detail="不支持的 Skill 来源。")
+        if _find_skill_file(target, name) is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Skill 目录里需要包含 SKILL.md（或 <name>.md），请按 Reasonix skill 结构组织。",
+            )
     except Exception:
         if target.exists():
             shutil.rmtree(target, ignore_errors=True)

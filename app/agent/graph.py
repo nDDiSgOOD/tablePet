@@ -184,6 +184,7 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
     from ..services.tokens import count_messages_tokens
     from ..services.memory_summarizer import summarize_to_short_term
     from ..config import MEMORY_CONTEXT_BUDGET_TOKENS
+    import json as _json
     import time as _time
 
     text = state.get("text") or ""
@@ -229,10 +230,12 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
     )
     user_id = state.get("user_id") or "tablepet"
     try:
-        from ..services.agent_extensions import build_agent_extension_context
+        from ..services.agent_extensions import build_agent_extension_context, build_agent_tools, dispatch_agent_tool
         extension_context = build_agent_extension_context(user_id)
+        agent_tools = build_agent_tools(user_id)
     except Exception:
         extension_context = ""
+        agent_tools = []
     context_parts = [p for p in (system_block, extension_context) if p]
     system = persona + ("\n\n" + "\n\n".join(context_parts) if context_parts else "")
 
@@ -265,7 +268,48 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
             user_id=user_id,
             purpose="chat",
             session_id=None,  # 这里还不知道 turn 写到哪个 session，下面 save 节点统一处理
+            tools=agent_tools,
         )
+        choices = (resp or {}).get("choices") if isinstance(resp, dict) else []
+        msg = ((choices[0] or {}).get("message") if choices else {}) or {}
+        tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else None
+        if agent_tools and isinstance(tool_calls, list) and tool_calls:
+            tool_messages = []
+            for call in tool_calls[:3]:
+                fn = (call.get("function") or {}) if isinstance(call, dict) else {}
+                name = str(fn.get("name") or "")
+                raw_args = str(fn.get("arguments") or "{}")
+                try:
+                    args = _json.loads(raw_args) if raw_args.strip() else {}
+                    if not isinstance(args, dict):
+                        args = {}
+                except Exception:
+                    args = {}
+                result = dispatch_agent_tool(user_id, name, args)
+                tool_messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.get("id") or name,
+                    "content": result,
+                })
+            messages = [
+                *messages,
+                {
+                    "role": "assistant",
+                    "content": msg.get("content") or "",
+                    "tool_calls": tool_calls,
+                },
+                *tool_messages,
+            ]
+            follow = await call_deepseek_messages(
+                messages,
+                max_tokens=700,
+                user_id=user_id,
+                purpose="chat",
+                session_id=None,
+            )
+            first_metrics = extract_metrics(resp)
+            second_metrics = extract_metrics(follow)
+            resp = follow
     except Exception as exc:
         elapsed = int((_time.perf_counter() - started) * 1000)
         return {
@@ -277,6 +321,12 @@ async def node_llm(state: AgentState) -> dict[str, Any]:
 
     elapsed = int((_time.perf_counter() - started) * 1000)
     metrics = extract_metrics(resp)
+    if "first_metrics" in locals() and "second_metrics" in locals():
+        metrics = {
+            "prompt_tokens": first_metrics["prompt_tokens"] + second_metrics["prompt_tokens"],
+            "completion_tokens": first_metrics["completion_tokens"] + second_metrics["completion_tokens"],
+            "total_tokens": first_metrics["total_tokens"] + second_metrics["total_tokens"],
+        }
     return {
         "messages": messages,
         "raw_model_output": resp,
