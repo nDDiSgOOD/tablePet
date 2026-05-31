@@ -4809,6 +4809,7 @@ function renderSkillGroup(group) {
   const enabledCount = group.items.filter(x => x.enabled).length;
   const first = group.items[0] || {};
   const source = first.source_uri || group.key;
+  const ids = group.items.map(x => x.id).filter(Boolean).join(',');
   return `
     <div class="skill-card installed">
       <div class="skill-head">
@@ -4819,6 +4820,10 @@ function renderSkillGroup(group) {
         <span class="badge ok">集合</span>
       </div>
       <div class="skill-desc">${escapeHtml(source)}</div>
+      <div class="skill-actions">
+        <button class="btn" data-bulk-skill="${escapeHtml(ids)}" data-bulk-enabled="true">全部启用</button>
+        <button class="btn" data-bulk-skill="${escapeHtml(ids)}" data-bulk-enabled="false">全部停用</button>
+      </div>
       <details class="skill-children" open>
         <summary>展开子 Skill</summary>
         ${group.items.map(item => `
@@ -4868,6 +4873,18 @@ function renderSkills() {
   grid.querySelectorAll('[data-toggle-skill]').forEach(b => b.addEventListener('click', async () => {
     await api('POST', `/api/skills/${encodeURIComponent(b.dataset.toggleSkill)}/toggle`);
     refreshSkills();
+  }));
+  grid.querySelectorAll('[data-bulk-skill]').forEach(b => b.addEventListener('click', async () => {
+    const ids = (b.dataset.bulkSkill || '').split(',').filter(Boolean);
+    const enabled = b.dataset.bulkEnabled === 'true';
+    if (!ids.length) return;
+    try {
+      await Promise.all(ids.map(id => api('POST', `/api/skills/${encodeURIComponent(id)}/toggle`, { enabled })));
+      toast(enabled ? '已全部启用' : '已全部停用');
+      refreshSkills();
+    } catch (e) {
+      toast('批量操作失败：' + e.message, 'error');
+    }
   }));
 }
 function renderMcp() {

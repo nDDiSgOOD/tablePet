@@ -146,10 +146,10 @@ async def _discover_http_tools(url: str) -> list[dict[str, Any]]:
     return _tools_from_result(data.get("result"))
 
 
-async def _read_sse_until(reader: Any, target_id: int, timeout: float = 20) -> dict[str, Any]:
+async def _read_sse_until(lines: Any, target_id: int, timeout: float = 20) -> dict[str, Any]:
     event_data: list[str] = []
     async def _loop() -> dict[str, Any]:
-        async for line in reader.aiter_lines():
+        async for line in lines:
             if line.startswith("data:"):
                 event_data.append(line[5:].strip())
                 continue
@@ -176,8 +176,9 @@ async def _read_sse_until(reader: Any, target_id: int, timeout: float = 20) -> d
 async def _discover_sse_tools(url: str) -> list[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
         async with client.stream("GET", url, headers={"Accept": "text/event-stream"}) as stream:
+            lines = stream.aiter_lines()
             endpoint = ""
-            async for line in stream.aiter_lines():
+            async for line in lines:
                 if line.startswith("data:"):
                     payload = line[5:].strip()
                     if payload.startswith(("http://", "https://", "/")):
@@ -190,9 +191,9 @@ async def _discover_sse_tools(url: str) -> list[dict[str, Any]]:
                 "capabilities": {},
                 "clientInfo": {"name": "TablePet", "version": "0.1"},
             }))
-            await _read_sse_until(stream, 1)
+            await _read_sse_until(lines, 1)
             await client.post(endpoint, json=_jsonrpc_message(2, "tools/list"))
-            data = await _read_sse_until(stream, 2)
+            data = await _read_sse_until(lines, 2)
             return _tools_from_result(data.get("result"))
 
 
@@ -505,9 +506,57 @@ async def _install_uploaded_skill(payload: SkillUploadPayload) -> Path:
         raise
 
 
+def _split_legacy_collection_items(items: list[dict[str, Any]]) -> bool:
+    changed = False
+    existing_keys = {
+        (
+            str((item.get("config") or {}).get("collection_path") or ""),
+            str(item.get("name") or ""),
+        )
+        for item in items
+    }
+    for item in items:
+        config = item.get("config") or {}
+        if config.get("skill_path"):
+            continue
+        parsed = parse_skill_extensions([item])
+        if len(parsed) <= 1:
+            continue
+        collection_path = str(config.get("local_path") or item.get("source_uri") or "")
+        for skill in parsed:
+            key = (collection_path, skill["name"])
+            if key in existing_keys:
+                continue
+            upsert_extension(
+                DEFAULT_USER_ID,
+                kind="skill",
+                name=skill["name"],
+                description=skill["description"],
+                source_type=item.get("source_type") or "local_dir_upload",
+                source_uri=item.get("source_uri") or "",
+                content="",
+                config={
+                    "local_path": skill["local_path"],
+                    "skill_path": skill["path"],
+                    "collection_path": collection_path,
+                    "format": "skill_dir",
+                    "run_as": skill["run_as"],
+                    "allowed_tools": skill["allowed_tools"],
+                },
+                enabled=bool(item.get("enabled")),
+            )
+            existing_keys.add(key)
+            changed = True
+        delete_extension(DEFAULT_USER_ID, int(item["id"]), "skill")
+        changed = True
+    return changed
+
+
 @router.get("/skills")
 async def api_list_skills() -> dict[str, Any]:
     items = list_extensions(DEFAULT_USER_ID, "skill")
+    if _split_legacy_collection_items(items):
+        items = list_extensions(DEFAULT_USER_ID, "skill")
     parsed_by_id: dict[Any, list[dict[str, Any]]] = {}
     for skill in parse_skill_extensions(items):
         parsed_by_id.setdefault(skill.get("id"), []).append(skill)
