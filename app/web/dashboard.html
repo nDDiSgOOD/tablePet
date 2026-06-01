@@ -35,9 +35,12 @@
       --panel-3:   oklch(0.34 0.014 85);   /* 更高一层（悬停时回退） */
       --line:      oklch(0.40 0.014 85);   /* 边框、分割 */
       --line-soft: oklch(0.36 0.012 85);   /* 弱分割（panel 内部） */
-      --bg-grad:   radial-gradient(ellipse 1200px 800px at 70% -10%,
-                     oklch(0.32 0.04 60 / 0.35) 0%,
-                     transparent 60%);     /* 页面顶部一抹暖光，立体感来源 */
+      --bg-grad:   radial-gradient(ellipse 900px 600px at 12% -10%,
+                     oklch(0.42 0.10 280 / 0.28) 0%, transparent 55%),
+                   radial-gradient(ellipse 1100px 700px at 88% 8%,
+                     oklch(0.40 0.10 30 / 0.22) 0%, transparent 58%),
+                   radial-gradient(ellipse 1400px 900px at 50% 110%,
+                     oklch(0.40 0.08 220 / 0.20) 0%, transparent 60%);     /* 暖灯火 mesh：左紫右暖底蓝，呼吸感 */
 
       /* ----- Ink (text) - 都已验证 ≥ 4.5:1 对比度 ----- */
       --text:      oklch(0.97 0.005 85);
@@ -111,7 +114,7 @@
       --shadow-drawer: -16px 0 48px rgba(0,0,0,.5);
       --shadow-toast: 0 12px 32px rgba(0,0,0,.45);
       --shadow-pop: 0 6px 20px rgba(0,0,0,.4);
-      --shadow-card: 0 1px 2px rgba(0,0,0,.2);
+      --shadow-card: none;
 
       --mono: "SF Mono", "JetBrains Mono", Menlo, "Cascadia Code", monospace;
 
@@ -133,9 +136,12 @@
       --panel-3:   oklch(0.93 0.006 85);
       --line:      oklch(0.84 0.008 85);
       --line-soft: oklch(0.90 0.006 85);
-      --bg-grad:   radial-gradient(ellipse 1200px 800px at 70% -10%,
-                     oklch(0.92 0.04 60 / 0.55) 0%,
-                     transparent 60%);
+      --bg-grad:   radial-gradient(ellipse 900px 600px at 12% -10%,
+                     oklch(0.85 0.08 280 / 0.45) 0%, transparent 55%),
+                   radial-gradient(ellipse 1100px 700px at 88% 8%,
+                     oklch(0.88 0.06 30 / 0.45) 0%, transparent 58%),
+                   radial-gradient(ellipse 1400px 900px at 50% 110%,
+                     oklch(0.90 0.06 220 / 0.35) 0%, transparent 60%);
 
       --text:      oklch(0.22 0.010 85);
       --text-soft: oklch(0.40 0.012 85);
@@ -164,7 +170,7 @@
       --shadow-drawer: -16px 0 48px rgba(35,30,20,.18);
       --shadow-toast: 0 12px 32px rgba(35,30,20,.18);
       --shadow-pop: 0 6px 20px rgba(35,30,20,.14);
-      --shadow-card: 0 1px 2px rgba(35,30,20,.06);
+      --shadow-card: none;
 
       --hero-glow: radial-gradient(circle at 50% 30%,
         oklch(0.92 0.05 60 / 0.7) 0%,
@@ -276,7 +282,256 @@
     .badge.warn  { background:var(--warn-soft); color:oklch(0.95 0.16 85); }
     .badge.muted { background:color-mix(in oklch, var(--panel-2) 15%, transparent); color:var(--muted); }
 
-    /* ========== 欢迎页 ========== */
+    /* ========== 开屏（splash + welcome 二合一） ==========
+     * 视觉骨架：
+     *   - 整页深色，三个柔和 orb 在背景做缓慢漂移
+     *   - 中间 stage 600px 居中，按 timeline 分阶段揭示：
+     *     brand → pet 状态卡 → 能力 chips → 进入按钮
+     * 设计动机：
+     *   - splash 不是"过场"，而是"问候 + 现状汇报"。
+     *     用户进来第一眼就知道桌宠现在的活力心情，自带语境。
+     *   - 不再有第二个 welcome 页面，按钮按下直接淡出 → 进对话。
+     */
+    #splash {
+      position:fixed; inset:0; z-index:calc(var(--z-modal) + 100);
+      display:flex; align-items:center; justify-content:center;
+      padding:32px 24px;
+      overflow:hidden;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 110%,
+          oklch(0.30 0.10 220 / 0.55) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 40% at 50% -10%,
+          oklch(0.35 0.12 290 / 0.45) 0%, transparent 70%),
+        var(--bg);
+      transition:opacity 480ms var(--ease-out), visibility 480ms var(--ease-out);
+    }
+    #splash.is-leaving { opacity:0; visibility:hidden; pointer-events:none; }
+    [data-theme="light"] #splash {
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 110%,
+          oklch(0.85 0.10 220 / 0.55) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 40% at 50% -10%,
+          oklch(0.88 0.12 290 / 0.45) 0%, transparent 70%),
+        var(--bg);
+    }
+    .splash-orb {
+      position:absolute;
+      border-radius:50%;
+      filter:blur(64px);
+      opacity:0.55;
+      pointer-events:none;
+      will-change:transform;
+    }
+    .splash-orb-1 {
+      width:480px; height:480px;
+      left:-12%; top:-10%;
+      background:radial-gradient(circle, var(--purple) 0%, transparent 70%);
+    }
+    .splash-orb-2 {
+      width:520px; height:520px;
+      right:-15%; top:30%;
+      background:radial-gradient(circle, var(--accent) 0%, transparent 70%);
+      opacity:0.45;
+    }
+    .splash-orb-3 {
+      width:380px; height:380px;
+      left:30%; bottom:-12%;
+      background:radial-gradient(circle, var(--pink) 0%, transparent 70%);
+      opacity:0.35;
+    }
+
+    .splash-stage {
+      position:relative;
+      width:100%;
+      max-width:560px;
+      display:flex; flex-direction:column; align-items:center;
+      gap:28px;
+      text-align:center;
+    }
+
+    /* ----- 品牌（猫 mark + 标题 + tagline） ----- */
+    .splash-brand {
+      display:flex; flex-direction:column; align-items:center; gap:14px;
+    }
+    .splash-mark {
+      width:88px; height:88px;
+      color:var(--accent);
+      filter:drop-shadow(0 8px 24px color-mix(in oklch, var(--accent) 50%, transparent));
+    }
+    .splash-word {
+      font-size:36px; font-weight:700;
+      letter-spacing:-0.02em;
+      color:var(--text);
+    }
+    .splash-tagline {
+      font-size:14px;
+      color:var(--text-soft);
+      letter-spacing:0.01em;
+      line-height:1.55;
+      max-width:420px;
+      text-wrap:balance;
+    }
+
+    /* ----- 宠物状态卡 ----- */
+    .splash-pet {
+      width:100%;
+      padding:18px 22px;
+      border-radius:16px;
+      background:color-mix(in oklch, var(--panel) 70%, transparent);
+      border:1px solid var(--line-soft);
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+      display:flex; flex-direction:column; gap:14px;
+      text-align:left;
+    }
+    .splash-pet[hidden] { display:none; }
+    .splash-pet-row {
+      display:flex; align-items:center; gap:14px;
+    }
+    .splash-pet-avatar {
+      width:44px; height:44px;
+      border-radius:50%;
+      background:linear-gradient(135deg, var(--accent-soft), var(--purple-soft));
+      border:1px solid var(--line-soft);
+      display:flex; align-items:center; justify-content:center;
+      font-size:22px; line-height:1;
+      flex-shrink:0;
+      overflow:hidden;
+    }
+    .splash-pet-avatar img {
+      width:100%; height:100%; object-fit:cover;
+    }
+    .splash-pet-meta { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+    .splash-pet-name { font-size:15px; font-weight:600; color:var(--text); }
+    .splash-pet-mood { font-size:12px; color:var(--text-soft); }
+    .splash-pet-stats {
+      display:grid;
+      grid-template-columns:repeat(3, 1fr);
+      gap:14px;
+    }
+    .splash-stat {
+      display:grid;
+      grid-template-columns:auto 1fr auto;
+      align-items:center;
+      gap:8px;
+    }
+    .splash-stat-label {
+      font-size:11px;
+      color:var(--muted);
+      letter-spacing:0.04em;
+    }
+    .splash-stat-bar {
+      height:5px;
+      background:color-mix(in oklch, var(--panel-3) 80%, transparent);
+      border-radius:3px;
+      overflow:hidden;
+    }
+    .splash-stat-fill {
+      height:100%;
+      width:var(--w, 0%);
+      border-radius:3px;
+      background:linear-gradient(90deg, var(--accent), var(--purple));
+      transition:width 720ms var(--ease-out);
+    }
+    .splash-stat-fill[data-stat="energy"] {
+      background:linear-gradient(90deg, var(--ok), var(--accent));
+    }
+    .splash-stat-fill[data-stat="mood"] {
+      background:linear-gradient(90deg, var(--pink), var(--purple));
+    }
+    .splash-stat-fill[data-stat="exp"] {
+      background:linear-gradient(90deg, var(--warn), var(--pink));
+    }
+    .splash-stat-val {
+      font-family:var(--mono);
+      font-size:11.5px;
+      color:var(--text);
+      font-weight:600;
+      min-width:28px;
+      text-align:right;
+    }
+    @media (max-width:520px) {
+      .splash-pet-stats { grid-template-columns:1fr; }
+    }
+
+    /* ----- 能力简介 ----- */
+    .splash-feats {
+      display:flex; flex-direction:column;
+      gap:8px;
+      width:100%;
+      text-align:left;
+    }
+    .splash-feat {
+      display:grid;
+      grid-template-columns:auto auto 1fr;
+      column-gap:10px;
+      align-items:baseline;
+      padding:9px 14px;
+      border-radius:12px;
+      background:color-mix(in oklch, var(--panel-2) 50%, transparent);
+      border:1px solid var(--line-soft);
+      font-size:13px;
+      color:var(--text-soft);
+    }
+    .splash-feat strong {
+      color:var(--text); font-weight:600;
+    }
+    .splash-feat-dot {
+      width:6px; height:6px;
+      border-radius:50%;
+      background:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+      align-self:center;
+    }
+
+    /* ----- 进入按钮 ----- */
+    #splash .splash-enter {
+      margin-top:6px;
+      display:inline-flex; align-items:center; gap:10px;
+      padding:14px 28px;
+      border-radius:var(--r-pill);
+      background:var(--accent);
+      color:var(--accent-ink);
+      border:none; cursor:pointer;
+      font-size:15px; font-weight:600;
+      letter-spacing:0.01em;
+      transition:transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out);
+      box-shadow:0 8px 24px color-mix(in oklch, var(--accent) 35%, transparent);
+    }
+    #splash .splash-enter:hover {
+      transform:translateY(-2px);
+      box-shadow:0 14px 32px color-mix(in oklch, var(--accent) 45%, transparent);
+    }
+    #splash .splash-enter:active { transform:translateY(0); }
+    #splash .splash-enter svg {
+      width:16px; height:16px;
+      transition:transform 220ms var(--ease-out);
+    }
+    #splash .splash-enter:hover svg { transform:translateX(3px); }
+
+    .splash-hint {
+      font-size:11px;
+      color:var(--muted);
+      letter-spacing:0.04em;
+    }
+    .splash-hint kbd {
+      font-family:var(--mono);
+      font-size:10.5px;
+      padding:1px 6px;
+      border:1px solid var(--line);
+      border-radius:4px;
+      background:var(--panel-2);
+      color:var(--text-soft);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #splash { transition:none; }
+      .splash-orb { animation:none; }
+      .splash-stat-fill { transition:none; }
+    }
+
+    /* ========== 欢迎页（合并到 splash 后保留兜底，但默认不显示） ========== */
+    #welcome.hidden { display:none !important; }
     #welcome {
       position:fixed; inset:0; z-index:var(--z-welcome);
       display:flex; align-items:center; justify-content:center;
@@ -287,8 +542,8 @@
     #welcome .hero { text-align:center; max-width:640px; padding:var(--s-6); }
     #welcome .pet {
       font-size:88px; line-height:1; margin-bottom:var(--s-6);
-      animation:bob 3.6s var(--ease-out) infinite;
-      filter:drop-shadow(0 8px 24px oklch(0.78 0.16 10 / 0.3));
+      animation:bob 5.2s var(--ease-out) infinite;
+      filter:drop-shadow(0 10px 28px oklch(0.78 0.16 10 / 0.24));
     }
     @keyframes bob {
       0%,100% { transform:translateY(0) }
@@ -328,7 +583,7 @@
       margin-bottom:var(--s-1);
       font-size:var(--fs-base); font-weight:600;
     }
-    #enterBtn {
+    #welcome #enterBtn {
       padding:14px 36px;
       font-size:var(--fs-lg); font-weight:600;
       border-radius:var(--r-pill);
@@ -337,11 +592,11 @@
       border:none; cursor:pointer;
       transition:transform var(--t-base) var(--ease-out), background var(--t-base);
     }
-    #enterBtn:hover {
+    #welcome #enterBtn:hover {
       transform:translateY(-2px);
       background:oklch(0.84 0.13 230);
     }
-    #enterBtn:active { transform:translateY(0); }
+    #welcome #enterBtn:active { transform:translateY(0); }
 
     /* ========== 主布局 ========== */
     #app { display:grid; grid-template-columns:240px 1fr; height:100vh; }
@@ -413,11 +668,9 @@
       cursor:pointer;
       background:
         linear-gradient(135deg,
-          color-mix(in oklch, var(--accent) 20%, transparent) 0%,
-          color-mix(in oklch, var(--purple) 14%, transparent) 100%);
-      border:1px solid color-mix(in oklch, var(--accent) 35%, transparent);
-      backdrop-filter:blur(8px);
-      -webkit-backdrop-filter:blur(8px);
+          color-mix(in oklch, var(--accent) 16%, transparent) 0%,
+          color-mix(in oklch, var(--pink) 10%, transparent) 100%);
+      border:1px solid color-mix(in oklch, var(--accent) 34%, var(--line-soft));
       overflow:hidden;
       transition:transform var(--t-base) var(--ease-out),
                  border-color var(--t-base);
@@ -719,6 +972,7 @@
       box-shadow:var(--shadow-card);
       transition:background var(--t-slow), border-color var(--t-slow);
     }
+    .panel:hover { border-color:var(--line); }
     .panel-title {
       font-size:var(--fs-base); font-weight:600;
       color:var(--text); margin-bottom:var(--s-2);
@@ -788,7 +1042,6 @@
     }
     .avatar { box-shadow:none; }
     .avatar.lg { width:96px; height:96px; font-size:42px; }
-    .avatar { /* 沿用 */ }
     .avatar {
       width:80px; height:80px; border-radius:50%;
       background:linear-gradient(135deg, var(--accent), var(--pink));
@@ -1362,7 +1615,7 @@
     .persona-popover-grid .persona-card .head .label { font-size:var(--fs-md); }
     .persona-popover-grid .persona-card .desc {
       font-size:var(--fs-xs); line-height:1.5;
-      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+      display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical;
       overflow:hidden;
     }
     .persona-popover-active {
@@ -1390,6 +1643,15 @@
       gap:var(--s-2);
       align-items:flex-end;
       animation:msg-in 320ms var(--ease-out);
+    }
+    /* 气泡列：.bubble 和 .bubble-meta 上下排，跟 .who 头像并排。 */
+    .msg .bubble-col {
+      display:flex; flex-direction:column;
+      min-width:0;
+      align-items:flex-start;
+    }
+    .msg.msg-user .bubble-col, .msg.user .bubble-col {
+      align-items:flex-end;
     }
     @keyframes msg-in {
       from { opacity:0; transform:translateY(8px); }
@@ -1422,12 +1684,13 @@
       color:var(--accent);
     }
     .msg .bubble {
-      padding:11px 14px;
-      border-radius:var(--r-lg);
+      padding:10px 14px;
+      border-radius:16px;
       line-height:1.6;
       font-size:var(--fs-base);
       word-break:break-word;
       position:relative;
+      box-shadow:0 1px 2px rgba(0, 0, 0, 0.06);
     }
     /* 用户气泡 */
     .msg.msg-user, .msg.user {
@@ -1435,10 +1698,10 @@
       flex-direction:row-reverse;
     }
     .msg.msg-user .bubble, .msg.user .bubble {
-      background:var(--accent);
+      background:linear-gradient(135deg, var(--accent) 0%, color-mix(in oklch, var(--accent) 85%, var(--pink)) 100%);
       color:var(--accent-ink);
       border:none;
-      border-bottom-right-radius:6px;
+      border-bottom-right-radius:5px;
       font-weight:500;
     }
     /* 桌宠气泡 */
@@ -1446,14 +1709,14 @@
       align-self:flex-start;
     }
     .msg.msg-assistant .bubble, .msg.assistant .bubble {
-      background:var(--panel);
+      background:linear-gradient(135deg, color-mix(in oklch, var(--panel) 95%, var(--panel-2)) 0%, var(--panel) 100%);
       color:var(--text);
-      border:1px solid var(--line-soft);
-      border-bottom-left-radius:6px;
-      box-shadow:var(--shadow-card);
+      border:1px solid color-mix(in oklch, var(--line-soft) 70%, var(--accent-soft));
+      border-bottom-left-radius:5px;
     }
     .msg.msg-thinking .bubble {
       color:var(--text-soft);
+      background:var(--panel-2);
     }
     .chat-progress {
       display:block;
@@ -1461,6 +1724,36 @@
       font-size:var(--fs-xs);
       color:var(--muted);
       line-height:1.45;
+    }
+    /* 气泡外侧统计：紧贴气泡下方一行，灰色、mono 数字、零图标。
+     * 不再用 emoji 也不再做胶囊，单纯的辅助文字 (caption)。 */
+    .msg .bubble-meta {
+      margin-top:4px;
+      font-size:10.5px;
+      line-height:1.3;
+      color:var(--muted);
+      font-family:var(--mono);
+      font-feature-settings:"tnum";
+      letter-spacing:0.01em;
+      opacity:0.78;
+      display:flex; align-items:center; gap:6px;
+      white-space:nowrap;
+    }
+    /* 用户气泡 right-align，meta 也跟着对齐 */
+    .msg.msg-user .bubble-meta, .msg.user .bubble-meta {
+      justify-content:flex-end;
+    }
+    .msg .bubble-meta .sep {
+      color:var(--line);
+      opacity:0.7;
+    }
+    .msg .bubble-meta .meta-detail {
+      color:var(--muted);
+      opacity:0.85;
+    }
+    @media (max-width:640px) {
+      .msg .bubble-meta .meta-detail { display:none; }
+      .msg .bubble-meta .meta-detail + .sep { display:none; }
     }
     /* 系统/错误/提示 */
     .msg.msg-system .bubble, .msg.system .bubble {
@@ -2687,20 +2980,89 @@
 <div id="bgLayer"></div>
 <div id="bgOverlay"></div>
 
-<!-- ==================== 欢迎页 ==================== -->
-<div id="welcome">
-  <div class="hero">
-    <div class="pet">🐱</div>
-    <h1>TablePet</h1>
-    <div class="tagline">你的桌面 AI 小宠物 · 会聊天、会看你、会记住你</div>
-    <div class="features">
-      <div class="feat"><strong>🎙️ 语音对话</strong>低延迟 ASR + LLM + TTS 全链路</div>
-      <div class="feat"><strong>👀 视觉感知</strong>YuNet 人脸检测 + 表情识别</div>
-      <div class="feat"><strong>🧠 长期记忆</strong>记住你说过的每一件事</div>
+<!-- ==================== 开屏（splash + welcome 合并） ==================== -->
+<div id="splash" aria-label="TablePet 启动屏">
+  <!-- 背景里的两团呼吸光晕，给空间感（GSAP 会让它们做缓慢漂移） -->
+  <div class="splash-orb splash-orb-1" aria-hidden="true"></div>
+  <div class="splash-orb splash-orb-2" aria-hidden="true"></div>
+  <div class="splash-orb splash-orb-3" aria-hidden="true"></div>
+
+  <div class="splash-stage">
+    <!-- 阶段一：品牌标记（猫脸 + 文字） -->
+    <div class="splash-brand">
+      <svg class="splash-mark" viewBox="0 0 96 96" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path class="splash-ear splash-ear-l" d="M16 18 L28 38 L8 38 Z" fill="currentColor" stroke="none"/>
+        <path class="splash-ear splash-ear-r" d="M80 18 L68 38 L88 38 Z" fill="currentColor" stroke="none"/>
+        <path class="splash-face" d="M14 50 C14 70 28 84 48 84 C68 84 82 70 82 50 C82 38 76 30 68 28"/>
+        <path class="splash-face" d="M28 28 C20 30 14 38 14 50"/>
+        <circle class="splash-eye splash-eye-l" cx="36" cy="56" r="3" fill="currentColor" stroke="none"/>
+        <circle class="splash-eye splash-eye-r" cx="60" cy="56" r="3" fill="currentColor" stroke="none"/>
+      </svg>
+      <div class="splash-word">TablePet</div>
+      <div class="splash-tagline">一盏放在 IDE 旁边的小灯，陪你聊天、记录今天，也照看设备状态。</div>
     </div>
-    <button id="enterBtn">进入控制台 →</button>
+
+    <!-- 阶段二：宠物状态卡（数据来自 /api/pet/status） -->
+    <div class="splash-pet" id="splashPet" hidden>
+      <div class="splash-pet-row">
+        <div class="splash-pet-avatar" id="splashPetAvatar">🐱</div>
+        <div class="splash-pet-meta">
+          <div class="splash-pet-name" id="splashPetName">桌宠</div>
+          <div class="splash-pet-mood" id="splashPetMood">在线</div>
+        </div>
+      </div>
+      <div class="splash-pet-stats">
+        <div class="splash-stat">
+          <span class="splash-stat-label">活力</span>
+          <div class="splash-stat-bar"><div class="splash-stat-fill" data-stat="energy" style="--w:0%"></div></div>
+          <span class="splash-stat-val" id="splashStatEnergy">—</span>
+        </div>
+        <div class="splash-stat">
+          <span class="splash-stat-label">心情</span>
+          <div class="splash-stat-bar"><div class="splash-stat-fill" data-stat="mood" style="--w:0%"></div></div>
+          <span class="splash-stat-val" id="splashStatMood">—</span>
+        </div>
+        <div class="splash-stat">
+          <span class="splash-stat-label">经验</span>
+          <div class="splash-stat-bar"><div class="splash-stat-fill" data-stat="exp" style="--w:0%"></div></div>
+          <span class="splash-stat-val" id="splashStatExp">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 阶段三：能力简介 + 进入按钮 -->
+    <div class="splash-feats">
+      <div class="splash-feat">
+        <span class="splash-feat-dot" aria-hidden="true"></span>
+        <strong>语音对话</strong>
+        <span>从听见你到开口回应，全链路状态可查。</span>
+      </div>
+      <div class="splash-feat">
+        <span class="splash-feat-dot" aria-hidden="true"></span>
+        <strong>桌宠状态</strong>
+        <span>心情、活力和人格在主位，工程数据退到第二动线。</span>
+      </div>
+      <div class="splash-feat">
+        <span class="splash-feat-dot" aria-hidden="true"></span>
+        <strong>长期记忆</strong>
+        <span>把你主动留下的事实收好，下次聊天继续参考。</span>
+      </div>
+    </div>
+
+    <button id="enterBtn" class="splash-enter" type="button">
+      <span class="splash-enter-text">开始聊天</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M5 12h14M13 6l6 6-6 6"/>
+      </svg>
+    </button>
+
+    <div class="splash-hint" id="splashHint">按 <kbd>Enter</kbd> 进入</div>
   </div>
 </div>
+
+<!-- 旧 welcome 已与 splash 合并，仅保留隐藏的 sentinel 兼容老代码 -->
+<div id="welcome" class="hidden" aria-hidden="true"></div>
 
 <!-- ==================== 主应用 ==================== -->
 <div id="app">
@@ -3212,7 +3574,7 @@
 
         <!-- 消息区 -->
         <div class="chat-log" id="chatLog">
-          <div class="msg msg-assistant" id="chatGreeting"><div class="who" aria-hidden="true">🐱</div><div class="bubble">…</div></div>
+          <div class="msg msg-assistant" id="chatGreeting"><div class="who" aria-hidden="true">🐱</div><div class="bubble-col"><div class="bubble">…</div></div></div>
         </div>
 
         <!-- pill 输入条（底部对齐） -->
@@ -3620,6 +3982,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
 <script>
 /* =====================================================================
    工具：DOM / 网络 / 提示
@@ -3629,6 +3992,334 @@ const $$ = (sel) => document.querySelectorAll(sel);
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtTime = (ts) => ts ? new Date(ts*1000).toLocaleTimeString() : '--';
 const ageText = (s) => s == null ? '--' : `${s.toFixed(1)} 秒前`;
+
+/* =====================================================================
+   GSAP motion layer：渐进增强，不改变 DOM / API 契约
+   ===================================================================== */
+const Motion = (() => {
+  const noop = () => {};
+  const api = {
+    runSplash(_onLeave) { return { leave(done) { if (done) done(); } }; },
+    initWelcome: noop,
+    enterWelcome(done) { if (done) done(); },
+    pageIn: noop,
+    navState: noop,
+    messageIn: noop,
+    popoverIn: noop,
+    panelOpen: noop,
+    petNudge: noop,
+    pulseAccent: noop,
+  };
+  const g = window.gsap;
+  if (!g) return api;
+
+  g.defaults({ duration: 0.22, ease: 'back.out(1.4)', overwrite: 'auto' });
+  const mm = g.matchMedia();
+  let reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let isDesktop = window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
+
+  mm.add({
+    reduceMotion: '(prefers-reduced-motion: reduce)',
+    isDesktop: '(min-width: 900px)',
+  }, (context) => {
+    reduceMotion = !!context.conditions.reduceMotion;
+    isDesktop = !!context.conditions.isDesktop;
+  });
+
+  const q = (root, selector) => Array.from((root || document).querySelectorAll(selector));
+
+  api.initWelcome = () => {
+    const welcome = $('welcome');
+    if (!welcome || welcome.classList.contains('hidden')) return;
+    const petEl = welcome.querySelector('.pet');
+    const titleEl = welcome.querySelector('h1');
+    const taglineEl = welcome.querySelector('.tagline');
+    const featEls = q(welcome, '.feat');
+    const enterBtn = $('enterBtn');
+    const pieces = [petEl, titleEl, taglineEl, ...featEls, enterBtn].filter(Boolean);
+    
+    if (reduceMotion) {
+      g.fromTo(welcome.querySelector('.hero'), { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.08 });
+      return;
+    }
+    
+    // 使用时间线来创建更流畅的动画序列
+    const tl = g.timeline();
+    
+    // 首先出现整个 hero 容器
+    tl.fromTo(welcome.querySelector('.hero'), 
+      { autoAlpha: 0, scale: 0.95 }, 
+      { autoAlpha: 1, scale: 1, duration: 0.35, ease: 'elastic.out(1, 0.8)' }
+    );
+    
+    // 宠物 emoji 有一个弹跳动画
+    if (petEl) {
+      tl.fromTo(petEl, 
+        { y: -30, scale: 0.5, rotation: -10, autoAlpha: 0 }, 
+        { y: 0, scale: 1, rotation: 0, autoAlpha: 1, duration: 0.45, ease: 'elastic.out(1, 0.6)' },
+        '-=0.2'
+      );
+      
+      // 添加永久的漂浮动画
+      g.to(petEl, {
+        y: -8,
+        duration: 2.5,
+        ease: 'sine.inOut',
+        repeat: -1,
+        yoyo: true
+      });
+    }
+    
+    // 其他元素依次浮现
+    const otherPieces = [titleEl, taglineEl, ...featEls, enterBtn].filter(Boolean);
+    tl.fromTo(otherPieces, 
+      { autoAlpha: 0, y: 20 }, 
+      { autoAlpha: 1, y: 0, duration: 0.35, stagger: 0.06, ease: 'power3.out' },
+      '-=0.25'
+    );
+    
+    // 按钮悬停效果
+    if (enterBtn) {
+      enterBtn.addEventListener('mouseenter', () => {
+        g.to(enterBtn, { scale: 1.05, y: -3, duration: 0.2, ease: 'power2.out' });
+      });
+      enterBtn.addEventListener('mouseleave', () => {
+        g.to(enterBtn, { scale: 1, y: 0, duration: 0.2, ease: 'power2.out' });
+      });
+    }
+  };
+
+  api.enterWelcome = (done) => {
+    const welcome = $('welcome');
+    if (!welcome) { if (done) done(); return; }
+    if (reduceMotion) {
+      g.to(welcome, { autoAlpha: 0, duration: 0.06, onComplete: done });
+      return;
+    }
+    const tl = g.timeline({ onComplete: done });
+    tl.to(welcome.querySelector('.hero'), { 
+      y: -40, 
+      scale: 0.9, 
+      autoAlpha: 0, 
+      duration: 0.3, 
+      ease: 'back.in(1.5)' 
+    }, 0);
+    tl.to(welcome, { 
+      autoAlpha: 0, 
+      duration: 0.35, 
+      ease: 'power2.in' 
+    }, 0.05);
+  };
+
+  api.pageIn = (page) => {
+    if (!page) return;
+    const targets = Array.from(page.children).filter(el => !el.classList.contains('page-title'));
+    if (!targets.length) return;
+    if (reduceMotion) {
+      g.fromTo(targets, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.08, clearProps: 'visibility,opacity' });
+      return;
+    }
+    g.fromTo(targets, { autoAlpha: 0, y: 15, scale: 0.97 }, {
+      autoAlpha: 1,
+      y: 0,
+      scale: 1,
+      duration: 0.35,
+      stagger: Math.min(0.05, 0.25 / Math.max(targets.length, 1)),
+      ease: 'back.out(1.3)',
+      clearProps: 'visibility,opacity,transform',
+    });
+  };
+
+  api.navState = (nav) => {
+    if (!nav || reduceMotion) return;
+    g.fromTo(nav, 
+      { scale: 0.95, backgroundColor: 'transparent' }, 
+      { scale: 1, duration: 0.25, ease: 'elastic.out(1, 0.5)', clearProps: 'transform' }
+    );
+  };
+
+  api.messageIn = (msg) => {
+    if (!msg) return;
+    if (reduceMotion) {
+      g.fromTo(msg, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.06, clearProps: 'visibility,opacity' });
+      return;
+    }
+    const dir = msg.classList.contains('msg-user') || msg.classList.contains('user') ? 1 : -1;
+    g.fromTo(msg, { 
+      autoAlpha: 0, 
+      y: 12, 
+      x: isDesktop ? dir * 15 : 0, 
+      scale: 0.95 
+    }, {
+      autoAlpha: 1,
+      y: 0,
+      x: 0,
+      scale: 1,
+      duration: 0.35,
+      ease: 'back.out(1.5)',
+      clearProps: 'visibility,opacity,transform',
+    });
+  };
+
+  api.popoverIn = (el) => {
+    if (!el) return;
+    if (reduceMotion) {
+      g.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.06, clearProps: 'visibility,opacity' });
+      return;
+    }
+    g.fromTo(el, { 
+      autoAlpha: 0, 
+      y: -12, 
+      scale: 0.92, 
+      rotation: -2 
+    }, { 
+      autoAlpha: 1, 
+      y: 0, 
+      scale: 1, 
+      rotation: 0,
+      duration: 0.3, 
+      ease: 'elastic.out(1, 0.6)', 
+      clearProps: 'visibility,opacity,transform' 
+    });
+  };
+
+  api.panelOpen = (el) => {
+    if (!el || reduceMotion) return;
+    g.fromTo(el, { 
+      autoAlpha: 0, 
+      y: 18, 
+      scale: 0.92 
+    }, { 
+      autoAlpha: 1, 
+      y: 0, 
+      scale: 1, 
+      duration: 0.35, 
+      ease: 'back.out(1.4)', 
+      clearProps: 'visibility,opacity,transform' 
+    });
+  };
+
+  api.petNudge = (target, type = 'pet') => {
+    if (!target || reduceMotion) return;
+    const vars = type === 'sleep'
+      ? { y: 4, scale: 0.985, rotation: 2, duration: 0.25 }
+      : type === 'play'
+        ? { y: -6, rotation: 4, scale: 1.05, duration: 0.3 }
+        : { y: -4, scale: 1.03, duration: 0.22 };
+    g.to(target, { ...vars, ease: 'elastic.out(1, 0.5)', yoyo: true, repeat: 1, clearProps: 'transform' });
+  };
+
+  api.pulseAccent = (target) => {
+    if (!target || reduceMotion) return;
+    g.fromTo(target,
+      { boxShadow: '0 0 0 0 rgba(124,179,255,0.55)' },
+      { boxShadow: '0 0 0 12px rgba(124,179,255,0)', duration: 0.7, ease: 'power2.out', clearProps: 'box-shadow' }
+    );
+  };
+
+  /* 开屏 splash 动画。
+   * 整合了原 splash + welcome：先 mark/word 入场，然后宠物状态、能力卡、按钮依次浮现，
+   * 最终停留等待用户点击进入按钮。
+   * 调用方提供 onLeave 回调：当用户点击/按 Enter 时执行离场动画并通知。
+   */
+  api.runSplash = (onLeave) => {
+    const splash = document.getElementById('splash');
+    if (!splash) { if (onLeave) onLeave(); return { leave(done) { if (done) done(); } }; }
+    const stage = splash.querySelector('.splash-stage');
+    const orbs = q(splash, '.splash-orb');
+    const ears = q(splash, '.splash-ear');
+    const faces = q(splash, '.splash-face');
+    const eyes = q(splash, '.splash-eye');
+    const word = splash.querySelector('.splash-word');
+    const tagline = splash.querySelector('.splash-tagline');
+    const petCard = splash.querySelector('.splash-pet');
+    const feats = q(splash, '.splash-feat');
+    const enterBtn = splash.querySelector('.splash-enter');
+    const hint = splash.querySelector('.splash-hint');
+
+    const leave = (done) => {
+      if (reduceMotion) {
+        g.to(splash, { autoAlpha: 0, duration: 0.18, onComplete: () => {
+          splash.classList.add('is-leaving');
+          if (done) done();
+        }});
+        return;
+      }
+      const lt = g.timeline({ onComplete: () => {
+        splash.classList.add('is-leaving');
+        if (done) done();
+      }});
+      lt.to(stage, { y: -24, scale: 0.96, autoAlpha: 0, duration: 0.32, ease: 'power2.in' });
+      lt.to(orbs, { autoAlpha: 0, duration: 0.32, ease: 'power2.out' }, 0);
+      lt.to(splash, { autoAlpha: 0, duration: 0.36, ease: 'power2.out' }, '-=0.18');
+    };
+
+    if (reduceMotion) {
+      g.set([orbs, stage], { autoAlpha: 1 });
+      if (petCard) petCard.hidden = false;
+      return { leave };
+    }
+
+    // orbs 缓慢漂移（无限循环）
+    if (orbs.length) {
+      orbs.forEach((o, i) => {
+        g.to(o, {
+          x: i % 2 === 0 ? 30 : -30,
+          y: i % 2 === 0 ? -20 : 20,
+          duration: 8 + i * 1.5,
+          ease: 'sine.inOut',
+          repeat: -1,
+          yoyo: true,
+        });
+      });
+    }
+
+    // 入场 timeline
+    const tl = g.timeline({ defaults: { ease: 'power3.out' } });
+    tl.fromTo(orbs, { autoAlpha: 0, scale: 0.85 }, { autoAlpha: (i,t) => parseFloat(getComputedStyle(t).opacity) || 0.5, scale: 1, duration: 0.6, stagger: 0.08, ease: 'expo.out' });
+    tl.fromTo(stage, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: 'expo.out' }, '-=0.4');
+    if (ears.length) {
+      tl.fromTo(ears, { y: -22, autoAlpha: 0, rotation: -8 }, { y: 0, autoAlpha: 1, rotation: 0, duration: 0.5, stagger: 0.05, ease: 'elastic.out(1, 0.5)' }, '-=0.2');
+    }
+    if (faces.length) {
+      tl.fromTo(faces, { autoAlpha: 0, scale: 0.86, transformOrigin: '50% 60%' }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: 'back.out(1.6)' }, '-=0.35');
+    }
+    if (eyes.length) {
+      tl.fromTo(eyes, { scaleY: 0.05, autoAlpha: 0, transformOrigin: '50% 50%' }, { scaleY: 1, autoAlpha: 1, duration: 0.18, stagger: 0.06, ease: 'power2.out' }, '-=0.1');
+      tl.to(eyes, { scaleY: 0.05, duration: 0.08, transformOrigin: '50% 50%' }, '+=0.5');
+      tl.to(eyes, { scaleY: 1, duration: 0.14, ease: 'power2.out' });
+    }
+    if (word) {
+      tl.fromTo(word, { autoAlpha: 0, y: 10, letterSpacing: '0.04em' }, { autoAlpha: 1, y: 0, letterSpacing: '-0.02em', duration: 0.42 }, '-=0.4');
+    }
+    if (tagline) {
+      tl.fromTo(tagline, { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, duration: 0.32 }, '-=0.25');
+    }
+    if (petCard) {
+      tl.add(() => { petCard.hidden = false; });
+      tl.fromTo(petCard, { autoAlpha: 0, y: 18, scale: 0.96 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.45, ease: 'back.out(1.3)' }, '-=0.05');
+      // 状态条 fill 入场（CSS transition 兜底；这里再做 stagger 让它们逐条充满）
+      const fills = q(splash, '.splash-stat-fill');
+      tl.fromTo(fills, { width: 0 }, { width: (i, t) => t.style.getPropertyValue('--w') || '0%', duration: 0.6, stagger: 0.1, ease: 'power2.out' }, '-=0.25');
+    }
+    if (feats.length) {
+      tl.fromTo(feats, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.36, stagger: 0.07 }, '-=0.3');
+    }
+    if (enterBtn) {
+      tl.fromTo(enterBtn, { autoAlpha: 0, y: 12, scale: 0.95 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.4, ease: 'back.out(1.5)' }, '-=0.2');
+      // 按钮微脉动
+      g.to(enterBtn, { scale: 1.025, duration: 1.6, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: 1.6 });
+    }
+    if (hint) {
+      tl.fromTo(hint, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.32 }, '-=0.2');
+    }
+
+    return { leave };
+  };
+
+  return api;
+})();
+
 
 function toast(msg, type='info') {
   const el = $('toast');
@@ -3674,6 +4365,7 @@ function confirmDialog({ title='确认操作', body='', okText='确定', cancelT
     okBtn.classList.toggle('primary', !danger);
     $('confirmCancel').textContent = cancelText;
     $('confirmMask').classList.add('show');
+    Motion.panelOpen($('confirmBox'));
     setTimeout(() => okBtn.focus(), 50);
   });
 }
@@ -3704,12 +4396,60 @@ document.addEventListener('keydown', (e) => {
    ===================================================================== */
 const THEME_KEY = 'tablepet.theme';
 const PRESETS = [
-  { id:'none',     label:'无',          kind:'none',     value:'' },
-  { id:'aurora',   label:'极光',        kind:'gradient', value:'linear-gradient(135deg, #0f1216 0%, #1a2238 40%, #2d1a4d 70%, #4a1a5c 100%)' },
-  { id:'sunset',   label:'日落',        kind:'gradient', value:'linear-gradient(135deg, #2d1b4e 0%, #6b2470 40%, #c9457a 70%, #ff8a65 100%)' },
-  { id:'ocean',    label:'深海',        kind:'gradient', value:'linear-gradient(180deg, #0a1929 0%, #15376b 50%, #1e5fa8 100%)' },
-  { id:'forest',   label:'森林',        kind:'gradient', value:'linear-gradient(135deg, #0d2818 0%, #1a4a2e 50%, #3d7a4f 100%)' },
-  { id:'sakura',   label:'樱花',        kind:'gradient', value:'linear-gradient(135deg, #1a0a1a 0%, #4a1a3a 40%, #a04a6e 70%, #f8b6c8 100%)' },
+  { id:'none',     label:'默认 · 暖灯火',          kind:'none',     value:'' },
+
+  /* ----- 多色 mesh：现代 SaaS 流行视觉，柔和不抢戏 ----- */
+  { id:'mesh-dawn',  label:'晨曦 · 蓝紫粉',
+    kind:'gradient',
+    value:'radial-gradient(at 18% 22%, oklch(0.62 0.20 280) 0%, transparent 55%),'
+        + 'radial-gradient(at 82% 18%, oklch(0.68 0.18 18) 0%, transparent 55%),'
+        + 'radial-gradient(at 50% 82%, oklch(0.62 0.16 220) 0%, transparent 60%),'
+        + 'linear-gradient(135deg, #0a0d14 0%, #131826 100%)' },
+
+  { id:'mesh-coral', label:'珊瑚 · 暖色 mesh',
+    kind:'gradient',
+    value:'radial-gradient(at 12% 28%, oklch(0.74 0.18 30) 0%, transparent 50%),'
+        + 'radial-gradient(at 78% 16%, oklch(0.78 0.16 60) 0%, transparent 55%),'
+        + 'radial-gradient(at 60% 88%, oklch(0.62 0.18 350) 0%, transparent 55%),'
+        + 'linear-gradient(135deg, #1a0e12 0%, #221218 100%)' },
+
+  { id:'mesh-mint',  label:'薄荷 · 青绿 mesh',
+    kind:'gradient',
+    value:'radial-gradient(at 25% 18%, oklch(0.74 0.16 175) 0%, transparent 55%),'
+        + 'radial-gradient(at 80% 70%, oklch(0.62 0.16 230) 0%, transparent 60%),'
+        + 'radial-gradient(at 40% 92%, oklch(0.70 0.14 160) 0%, transparent 60%),'
+        + 'linear-gradient(135deg, #0a1414 0%, #0e1a1a 100%)' },
+
+  { id:'mesh-noir',  label:'墨夜 · 极简深空',
+    kind:'gradient',
+    value:'radial-gradient(at 30% 25%, oklch(0.42 0.10 250) 0%, transparent 55%),'
+        + 'radial-gradient(at 75% 78%, oklch(0.36 0.08 300) 0%, transparent 60%),'
+        + 'linear-gradient(135deg, #0a0a10 0%, #11131c 100%)' },
+
+  /* ----- 经典渐变（保留之前的，色彩调过让饱和更克制） ----- */
+  { id:'aurora',   label:'极光',
+    kind:'gradient', value:'linear-gradient(135deg, #0f1216 0%, #1a2238 40%, #2d1a4d 70%, #4a1a5c 100%)' },
+  { id:'sunset',   label:'日落',
+    kind:'gradient', value:'linear-gradient(135deg, #2d1b4e 0%, #6b2470 40%, #c9457a 70%, #ff8a65 100%)' },
+  { id:'ocean',    label:'深海',
+    kind:'gradient', value:'linear-gradient(180deg, #0a1929 0%, #15376b 50%, #1e5fa8 100%)' },
+  { id:'forest',   label:'森林',
+    kind:'gradient', value:'linear-gradient(135deg, #0d2818 0%, #1a4a2e 50%, #3d7a4f 100%)' },
+  { id:'sakura',   label:'樱花',
+    kind:'gradient', value:'linear-gradient(135deg, #1a0a1a 0%, #4a1a3a 40%, #a04a6e 70%, #f8b6c8 100%)' },
+
+  /* ----- 新增：纯色配 conic / 微纹理 ----- */
+  { id:'conic-iris', label:'虹膜 · conic 渐变',
+    kind:'gradient',
+    value:'conic-gradient(from 220deg at 50% 50%, '
+        + '#1a2238 0deg, #2d1a4d 90deg, #4a1a5c 180deg, #1a3a4d 270deg, #1a2238 360deg)' },
+
+  { id:'duotone-papercut', label:'双色 · 纸切',
+    kind:'gradient',
+    value:'linear-gradient(160deg, oklch(0.30 0.06 250) 0%, oklch(0.30 0.06 250) 50%, '
+        + 'oklch(0.40 0.08 320) 50%, oklch(0.40 0.08 320) 100%)' },
+
+  /* ----- 图片预设（保留，仍然兜底） ----- */
   { id:'unsplash-mountain', label:'雪山', kind:'url', value:'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=2000&q=80' },
   { id:'unsplash-night',    label:'星夜', kind:'url', value:'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=2000&q=80' },
   { id:'unsplash-city',     label:'城市', kind:'url', value:'https://images.unsplash.com/photo-1493514789931-586cb221d7a7?w=2000&q=80' },
@@ -3809,6 +4549,7 @@ function renderPresets() {
 function openThemePanel() {
   document.getElementById('themePanel').classList.add('open');
   document.getElementById('themeMask').classList.add('open');
+  Motion.panelOpen(document.getElementById('themePanel'));
   applyTheme(); // 同步当前值到 UI
 }
 function closeThemePanel() {
@@ -3904,17 +4645,102 @@ applyTheme();          // 先用本地缓存，让首屏不闪白
 fetchThemeFromServer(); // 异步从 SQLite 拉真值，覆盖缓存
 
 /* =====================================================================
-   欢迎页
+   开屏（splash + welcome 二合一）
+   --------------------------------------------------------------------
+   首次会话：跑入场动画 + 加载宠物状态 + 等待用户点击进入按钮
+   非首次（已 splashed）：直接关掉 splash，跳过动画
    ===================================================================== */
-$('enterBtn').addEventListener('click', () => {
-  $('welcome').classList.add('hidden');
-  if (!location.hash) location.hash = '#profile';
-});
-// 已经访问过就跳过欢迎页
-if (sessionStorage.getItem('welcomed')) {
-  $('welcome').classList.add('hidden');
+(function setupSplashWelcome() {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  const enterBtn = document.getElementById('enterBtn');
+
+  const goChat = () => {
+    sessionStorage.setItem('splashed', '1');
+    if (!location.hash || location.hash === '#') location.hash = '#chat';
+  };
+
+  // 已经看过：直接跳过
+  if (sessionStorage.getItem('splashed')) {
+    splash.classList.add('is-leaving');
+    splash.style.display = 'none';
+    if (enterBtn) enterBtn.addEventListener('click', goChat);
+    return;
+  }
+
+  // 拉宠物状态填充 splash 上的状态卡（不阻塞动画；拿到再渲染）
+  loadSplashPetStatus();
+
+  // 跑入场动画，拿到 leave 控制器
+  const splashCtl = Motion.runSplash();
+
+  const exitSplash = () => {
+    if (!splashCtl) return;
+    splashCtl.leave(() => {
+      splash.style.display = 'none';
+      goChat();
+    });
+  };
+
+  if (enterBtn) {
+    enterBtn.addEventListener('click', exitSplash);
+  }
+  // Enter 键也能进
+  document.addEventListener('keydown', function onKey(e) {
+    if (splash.classList.contains('is-leaving')) {
+      document.removeEventListener('keydown', onKey);
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      exitSplash();
+      document.removeEventListener('keydown', onKey);
+    }
+  });
+})();
+
+async function loadSplashPetStatus() {
+  const splashPet = document.getElementById('splashPet');
+  if (!splashPet) return;
+  try {
+    const s = await api('GET', '/api/pet/status');
+    const moodEmoji = { happy:'😺', neutral:'🐱', sleepy:'😴', hungry:'😿', excited:'😸', sick:'🤒' };
+    const moodLabel = { happy:'心情很好', neutral:'平静', sleepy:'有点困', hungry:'有点饿', excited:'超开心', sick:'不太舒服' };
+    const avatarEl = document.getElementById('splashPetAvatar');
+    const nameEl = document.getElementById('splashPetName');
+    const moodEl = document.getElementById('splashPetMood');
+    if (avatarEl) {
+      avatarEl.innerHTML = '';
+      if (s.avatar) {
+        const img = document.createElement('img');
+        img.src = s.avatar;
+        img.alt = s.name || '桌宠';
+        avatarEl.appendChild(img);
+      } else {
+        avatarEl.textContent = moodEmoji[s.mood] || '🐱';
+      }
+    }
+    if (nameEl) nameEl.textContent = s.name || '桌宠';
+    if (moodEl) moodEl.textContent = moodLabel[s.mood] || '在线';
+    const stat = (id, fillSel, val, max=100) => {
+      const fill = document.querySelector(`.splash-stat-fill[data-stat="${fillSel}"]`);
+      const valEl = document.getElementById(id);
+      const pct = Math.max(0, Math.min(100, (Number(val) || 0) * 100 / max));
+      if (fill) fill.style.setProperty('--w', `${pct}%`);
+      if (valEl) valEl.textContent = (val !== undefined && val !== null) ? String(val) : '—';
+    };
+    stat('splashStatEnergy', 'energy', s.energy);
+    stat('splashStatMood', 'mood', moodToScore(s.mood));
+    stat('splashStatExp', 'exp', s.exp ?? s.experience ?? 0, s.exp_max || s.experience_max || 100);
+  } catch (_e) {
+    // 拉不到就维持默认；splash 仍能正常工作
+  }
 }
-$('enterBtn').addEventListener('click', () => sessionStorage.setItem('welcomed','1'));
+
+function moodToScore(mood) {
+  const map = { excited: 95, happy: 85, neutral: 60, sleepy: 45, hungry: 35, sick: 20 };
+  return map[mood] ?? 60;
+}
 
 /* =====================================================================
    导航
@@ -3931,6 +4757,8 @@ function showPage(id) {
   const nav = document.querySelector(`.navitem[data-page="${id}"]`);
   if (page) page.classList.add('active');
   if (nav) nav.classList.add('active');
+  Motion.pageIn(page);
+  Motion.navState(nav);
   // 同步 topbar 标题（使用 navitem 的 data-title）
   const tb = $('topbarTitle');
   if (tb && nav) tb.textContent = nav.dataset.title || nav.textContent.trim();
@@ -3942,7 +4770,7 @@ $$('.navitem').forEach(n => n.addEventListener('click', () => {
   location.hash = '#' + n.dataset.page;
 }));
 window.addEventListener('hashchange', () => {
-  const page = location.hash.slice(1) || 'profile';
+  const page = location.hash.slice(1) || 'chat';
   showPage(page);
   // 进入"记忆"页时自动拉一次会话流水 + AI 画像（AI 画像现在挂在记忆管理页）
   if (page === 'memory') {
@@ -3951,7 +4779,7 @@ window.addEventListener('hashchange', () => {
     if (typeof refreshAiProfile === 'function') refreshAiProfile();
   }
 });
-showPage(location.hash.slice(1) || 'profile');
+showPage(location.hash.slice(1) || 'chat');
 
 /* =====================================================================
    1) 用户简介
@@ -4248,6 +5076,7 @@ document.querySelectorAll('.pet-actions .btn').forEach(b => {
     try {
       await api('POST', '/api/pet/interact', { action });
       toast(TIPS[action] || '已交互');
+      Motion.petNudge($('petAvatar') || document.querySelector('.pet-emoji'), action);
     } catch (e) { toast('操作失败：' + e.message, 'error'); return; }
     // 不直接操作 DOM —— 复用 refreshPet 这唯一一处渲染入口，避免节点 id 不一致
     refreshPet();
@@ -4480,7 +5309,7 @@ function _bindSessionCardEvents() {
       _sessionTurnsCache.clear();
       refreshSessions({ append: false });
       location.hash = '#chat';
-      $('chatLog').innerHTML = '<div class="msg msg-assistant" id="chatGreeting"><div class="who" aria-hidden="true">🐱</div><div class="bubble">…</div></div>';
+      $('chatLog').innerHTML = '<div class="msg msg-assistant" id="chatGreeting"><div class="who" aria-hidden="true">🐱</div><div class="bubble-col"><div class="bubble">…</div></div></div>';
       if (typeof loadGreeting === 'function') loadGreeting();
       refreshMemory();
     });
@@ -4671,7 +5500,7 @@ async function _viewerResume() {
   _sessionTurnsCache.clear();
   refreshSessions({ append: false });
   location.hash = '#chat';
-  $('chatLog').innerHTML = '<div class="msg msg-assistant" id="chatGreeting"><div class="who" aria-hidden="true">🐱</div><div class="bubble">…</div></div>';
+  $('chatLog').innerHTML = '<div class="msg msg-assistant" id="chatGreeting"><div class="who" aria-hidden="true">🐱</div><div class="bubble-col"><div class="bubble">…</div></div></div>';
   if (typeof loadGreeting === 'function') loadGreeting();
   refreshMemory();
 }
@@ -4906,17 +5735,19 @@ function appendMsg(role, text) {
   const isUser = role === 'user';
   const el = document.createElement('div');
   el.className = 'msg ' + (isUser ? 'msg-user user' : 'msg-assistant assistant');
-  el.innerHTML = `<div class="who" aria-hidden="true"></div><div class="bubble">${escapeHtml(text)}</div>`;
+  el.innerHTML = `<div class="who" aria-hidden="true"></div><div class="bubble-col"><div class="bubble">${escapeHtml(text)}</div></div>`;
   _renderWhoAvatar(el.querySelector('.who'), isUser);
   $('chatLog').appendChild(el);
+  Motion.messageIn(el);
   $('chatLog').scrollTop = $('chatLog').scrollHeight;
 }
 function appendThinkingMsg() {
   const el = document.createElement('div');
   el.className = 'msg msg-assistant assistant msg-thinking';
-  el.innerHTML = '<div class="who" aria-hidden="true"></div><div class="bubble"><span class="chat-main">思考中...</span><span class="chat-progress">正在整理上下文</span></div>';
+  el.innerHTML = '<div class="who" aria-hidden="true"></div><div class="bubble-col"><div class="bubble"><span class="chat-main">思考中...</span><span class="chat-progress">正在整理上下文</span></div></div>';
   _renderWhoAvatar(el.querySelector('.who'), false);
   $('chatLog').appendChild(el);
+  Motion.messageIn(el);
   $('chatLog').scrollTop = $('chatLog').scrollHeight;
   const steps = ['正在整理上下文', '正在检查可用 Skill / MCP 工具', '如果需要会调用工具', '正在等待模型最终回复'];
   let idx = 0;
@@ -4927,14 +5758,62 @@ function appendThinkingMsg() {
   }, 1400);
   return {
     el,
-    finish(text) {
+    finish(text, meta) {
       clearInterval(timer);
       el.classList.remove('msg-thinking');
       const bubble = el.querySelector('.bubble');
-      if (bubble) bubble.textContent = text;
+      const col = el.querySelector('.bubble-col');
+      if (bubble) {
+        bubble.innerHTML = escapeHtml(text);
+      }
+      if (col && meta) appendBubbleMeta(col, meta);
       $('chatLog').scrollTop = $('chatLog').scrollHeight;
     },
   };
+}
+
+/* =====================================================================
+   把统计信息以微型 caption 形式贴在气泡正下方（不再用 emoji，纯文字）。
+   meta 字段：duration(秒) / prompt_tokens / completion_tokens / total_tokens / usage
+   ===================================================================== */
+function appendBubbleMeta(col, meta) {
+  if (!col || !meta) return;
+  // 提取 prompt / completion / total
+  let pt, ct, tt;
+  if (meta.usage && typeof meta.usage === 'object') {
+    pt = meta.usage.prompt_tokens;
+    ct = meta.usage.completion_tokens;
+    tt = meta.usage.total_tokens;
+  }
+  if (pt === undefined && meta.prompt_tokens !== undefined) pt = meta.prompt_tokens;
+  if (ct === undefined && meta.completion_tokens !== undefined) ct = meta.completion_tokens;
+  if (tt === undefined && meta.total_tokens !== undefined) tt = meta.total_tokens;
+  if ((tt === undefined || tt === 0) && (pt || ct)) {
+    tt = (Number(pt) || 0) + (Number(ct) || 0);
+  }
+  if (tt === undefined && meta.tokens !== undefined) tt = meta.tokens;
+
+  const hasLat = typeof meta.duration === 'number' && meta.duration > 0;
+  const hasTok = tt !== undefined && tt !== null && Number(tt) > 0;
+  if (!hasLat && !hasTok) return;
+
+  // 旧的 meta 移除（重发场景；正常一次只调一次，但稳一点）
+  const old = col.querySelector('.bubble-meta');
+  if (old) old.remove();
+
+  const metaEl = document.createElement('div');
+  metaEl.className = 'bubble-meta';
+  const parts = [];
+  if (hasLat) parts.push(`<span>${meta.duration.toFixed(2)}s</span>`);
+  if (hasTok) parts.push(`<span>${tt} tok</span>`);
+  if ((Number(pt) || 0) > 0 || (Number(ct) || 0) > 0) {
+    parts.push(`<span class="meta-detail">in ${Number(pt) || 0} · out ${Number(ct) || 0}</span>`);
+  }
+  metaEl.innerHTML = parts.join('<span class="sep">·</span>');
+  col.appendChild(metaEl);
+  if (window.gsap) {
+    window.gsap.fromTo(metaEl, { y: -3, autoAlpha: 0 }, { y: 0, autoAlpha: 0.78, duration: 0.32, ease: 'power3.out', clearProps: 'transform' });
+  }
 }
 function syncDeviceChat(d) {
   if (!d || location.hash.slice(1) !== 'chat') return;
@@ -4974,13 +5853,20 @@ async function sendChat() {
   if (input) input.disabled = true;
   appendMsg('user', text);
   const thinking = appendThinkingMsg();
+  const startTime = Date.now();
   try {
     const data = await api('POST', '/chat', {
       text,
       device_id: currentChatDeviceId(),
     });
     const reply = data.reply || '...';
-    thinking.finish(reply);
+    const duration = (Date.now() - startTime) / 1000;
+    // 提取所有可能的 tokens 信息
+    const meta = {
+      duration,
+      ...data,
+    };
+    thinking.finish(reply, meta);
     if ($('chatTtsToggle').checked) {
       // 标记"这条 reply web 已经显示过"，等会 syncDeviceChat 看到 last_tts_text
       // 与之相同时会跳过一次 appendMsg，避免重复气泡。
@@ -5053,7 +5939,7 @@ $('chatClearBtn').addEventListener('click', async () => {
     return;
   }
   // 清屏 + 重拉开场白
-  $('chatLog').innerHTML = '<div class="msg msg-assistant" id="chatGreeting"><div class="who" aria-hidden="true">🐱</div><div class="bubble">…</div></div>';
+  $('chatLog').innerHTML = '<div class="msg msg-assistant" id="chatGreeting"><div class="who" aria-hidden="true">🐱</div><div class="bubble-col"><div class="bubble">…</div></div></div>';
   await loadGreeting();
   toast('上一段对话已归档');
   refreshMemory();
@@ -5831,6 +6717,7 @@ function openPersonaPopover() {
   if (!pop) return;
   pop.hidden = false;
   _setPersonaExpanded(true);
+  Motion.popoverIn(pop);
 }
 function closePersonaPopover() {
   const pop = document.getElementById('personaPopover');
@@ -6934,7 +7821,7 @@ async function bootstrap() {
   loadGreeting();
   // 用户首次进来或刷新页面时如果已经停在 #memory，hashchange 不会触发，
   // 这里兜底拉一次会话流水 + AI 画像，免得用户看到空状态。
-  if ((location.hash.slice(1) || 'profile') === 'memory') {
+  if ((location.hash.slice(1) || 'chat') === 'memory') {
     if (typeof refreshSessions === 'function') refreshSessions({ append: false });
     if (typeof refreshAiProfile === 'function') refreshAiProfile();
   }

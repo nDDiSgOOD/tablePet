@@ -77,4 +77,7 @@ class AgentOutput(BaseModel):
     timing_ms: dict[str, float] = Field(default_factory=dict)
     debug: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 

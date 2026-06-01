@@ -104,6 +104,10 @@ class AgentState(TypedDict, total=False):
     timing_ms: dict
     debug: dict
     error: Optional[str]
+    latency_ms: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
 
 
 # ---------------------------------------------------------------------------
@@ -650,4 +654,7 @@ def to_output(state: AgentState) -> AgentOutput:
         timing_ms=state.get("timing_ms", {}),
         debug=state.get("debug", {}),
         error=state.get("error"),
+        prompt_tokens=int(state.get("prompt_tokens") or 0),
+        completion_tokens=int(state.get("completion_tokens") or 0),
+        total_tokens=int(state.get("total_tokens") or 0),
     )

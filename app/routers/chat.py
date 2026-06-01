@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.post("/chat")
-async def chat(payload: ChatRequest) -> dict[str, str]:
+async def chat(payload: ChatRequest) -> dict:
     result = await run_agent(
         AgentInput(
             channel=Channel.WEB,
@@ -29,4 +29,10 @@ async def chat(payload: ChatRequest) -> dict[str, str]:
             want_tts=False,
         )
     )
-    return {"reply": result.reply or (result.error or "")}
+    return {
+        "reply": result.reply or (result.error or ""),
+        "prompt_tokens": int(result.prompt_tokens or 0),
+        "completion_tokens": int(result.completion_tokens or 0),
+        "total_tokens": int(result.total_tokens or 0),
+        "latency_ms": float((result.timing_ms or {}).get("total") or 0.0),
+    }
