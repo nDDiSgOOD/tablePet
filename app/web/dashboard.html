@@ -4351,6 +4351,61 @@ async function api(method, url, body) {
 }
 
 /* =====================================================================
+   灵动岛伴生 App 客户端 / Dynamic Island companion client
+   --------------------------------------------------------------------
+   把当前宠物状态、聊天事件 push 到 FastAPI 的 /api/island/* 端点；
+   原生 TablePetIsland.app 反过来轮询这些端点拿数据。失败安静吞掉，
+   绝不影响主聊天流程（伴生 App 没启动时也不能让 web 报红）。
+   ===================================================================== */
+const island = (() => {
+  let _lastMood = null;
+  let _lastEnergyLow = false;
+  const ENERGY_LOW = 20;
+
+  async function _post(path, body) {
+    try { await api('POST', path, body); } catch {}
+  }
+
+  function notify(type, text, extra) {
+    _post('/api/island/event', {
+      type, text: (text || '').toString().slice(0, 200),
+      extra: extra || {},
+    });
+  }
+
+  function pushState(patch) { _post('/api/island/state', patch); }
+
+  /** 标记当前 pending 已读 → 后端清 pending_text，岛收回折叠态。
+   *  对应"三种收回情况"中的第 1 种：在网页端已读 */
+  function markRead() { _post('/api/island/read', {}); }
+
+  /* refreshTopbarPet 每 10s 调一次：检测心情变化 / 能量低，并推一次状态镜像 */
+  function syncFromPetStatus(s) {
+    if (!s) return;
+    pushState({
+      name: s.name || '桌宠',
+      avatar: s.avatar || '',
+      mood: s.mood || 'neutral',
+      mood_label: ({happy:'心情很好', neutral:'平静', sleepy:'有点困',
+                    hungry:'有点饿', excited:'超开心', sick:'不太舒服'})[s.mood] || '在线',
+      energy: Number(s.energy) || 0,
+      level: Number(s.level) || 1,
+    });
+    if (_lastMood !== null && s.mood && _lastMood !== s.mood) {
+      notify('mood_change', `${_lastMood} → ${s.mood}`, { mood: s.mood });
+    }
+    _lastMood = s.mood || _lastMood;
+    const lowNow = (Number(s.energy) || 0) < ENERGY_LOW;
+    if (lowNow && !_lastEnergyLow) {
+      notify('energy_low', `能量只剩 ${s.energy}`, { energy: s.energy });
+    }
+    _lastEnergyLow = lowNow;
+  }
+
+  return { notify, pushState, markRead, syncFromPetStatus };
+})();
+
+/* =====================================================================
    全局 Confirm 弹窗（替代原生 confirm，async/await 风格）
    ===================================================================== */
 let _confirmResolver = null;
@@ -4777,6 +4832,10 @@ window.addEventListener('hashchange', () => {
     _sessionsBeforeId = null;
     if (typeof refreshSessions === 'function') refreshSessions({ append: false });
     if (typeof refreshAiProfile === 'function') refreshAiProfile();
+  }
+  // 灵动岛：切到 chat 视图 → 用户开始看消息 → 标记已读，岛收回折叠态
+  if (page === 'chat' && typeof island !== 'undefined') {
+    island.markRead();
   }
 });
 showPage(location.hash.slice(1) || 'chat');
@@ -5836,6 +5895,9 @@ function syncDeviceChat(d) {
         appendMsg('assistant', d.last_tts_text);
       }
     }
+    /* 灵动岛：用户既然在 chat 视图看到了 device 这条回复 → 立即标记已读。
+       —— 这是"网页端已读"语义在 device 端消息上的延伸。 */
+    island.markRead();
   }
 }
 async function sendChat() {
@@ -5854,6 +5916,8 @@ async function sendChat() {
   appendMsg('user', text);
   const thinking = appendThinkingMsg();
   const startTime = Date.now();
+  /* 灵动岛：用户已发送消息，岛展示"思考中" */
+  island.notify('sent', text);
   try {
     const data = await api('POST', '/chat', {
       text,
@@ -5867,6 +5931,9 @@ async function sendChat() {
       ...data,
     };
     thinking.finish(reply, meta);
+    /* 灵动岛：收到 agent 回复 → 通知岛弹出消息态展示这条回复。
+       后续由 5s 超时 / hover / 切到 chat 视图 任一触发已读收回。 */
+    island.notify('received', reply);
     if ($('chatTtsToggle').checked) {
       // 标记"这条 reply web 已经显示过"，等会 syncDeviceChat 看到 last_tts_text
       // 与之相同时会跳过一次 appendMsg，避免重复气泡。
@@ -7678,6 +7745,8 @@ async function refreshTopbarPet() {
     const e = $('topbarPetEmoji'); if (e) e.textContent = moodEmojiMap[s.mood] || '🐱';
     const n = $('topbarPetName');
     if (n) n.textContent = `${s.name || '桌宠'} · Lv.${s.level ?? '?'}`;
+    /* 灵动岛伴生 App 同步：心情变化 / 能量低 触发事件 */
+    island.syncFromPetStatus(s);
   } catch {}
   try {
     const p = await api('GET', '/api/personas');
